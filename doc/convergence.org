@@ -1,0 +1,110 @@
+#+TITLE:Convergence for Mixed Communities
+
+* Failure cases
+** Poor estimates and divergence
+If estimates for community distribution parameters are poor, it is possible that the problem of maximizing the likelihood for an object becomes a different problem than estimating the parameters for the community whose parameters we want to optimize.
+
+That is, the estimated parameters for some of the other communities which the object belongs have a high error and thus we are finding a vector that accounts for that error rather than being an improved estimate of the community we are estimating.
+
+In order to have convergence to the true distributions, the community parameter estimate produced at each iteration must not move farther away from the true parameters.
+
+\begin{align*}
+\phi &= \begin{pmatrix}
+0.5 & 0.5
+\end{pmatrix},\\
+\Theta &= \begin{pmatrix}
+0.7 & 0.3 \\
+0.3 & 0.7
+\end{pmatrix},\\
+\hat{\Theta} &= \begin{pmatrix}
+0.5 & 0.5 \\
+0.6 & 0.4
+\end{pmatrix}.
+\end{align*}
+
+\begin{figure}[h!]
+  \centering
+    \includegraphics[width=0.9\textwidth]{flipped_convergence}
+  \caption{Divergence when optimizing for error and not the community. The solid line is the true parameter value for $\Theta_{1 1}$, the dotted line is the starting estimate ${\hat{\Theta}_{1 1}}$, the dashed line is the new estimate for $\Theta_{1 1}$.}
+  \label{fig:flipped-convergence}
+\end{figure}
+
+We see that we may increase the error for the community parameters we are trying to optimize. This exacerbates the problem as now when attempting to optimize the other community parameters we will instead be maximizing the likelihood to counter the error rather than estimating the true parameters of the community.
+
+After this iteration, $\hat{\Theta}_{1 \ast} = \langle 0.37, 0.63 \rangle$ which is diverging from the true parameters $\Theta_{1 \ast} = \langle 0.7, 0.3 \rangle$ as it accounts for the error in the estimate of the second community.
+
+This potentially causes divergence for all communities. I'm not sure if this is guaranteed to happen in all cases.
+
+In this case, the initial value for $\hat{\Theta}_{2 1} > \hat{\Theta}_{1 1}$ and  $$
+
+
+** Singularities (is there a better term?) and ambiguity
+Consider a dataset with a single object and two communities. We know the object mixture and the true community categorical parameters:
+
+\begin{align*}
+\phi &= \begin{pmatrix}
+0.5 & 0.5
+\end{pmatrix},\\
+\Theta &= \begin{pmatrix}
+0.7 & 0.3 \\
+0.3 & 0.7
+\end{pmatrix}.
+\end{align*}
+
+This results in a mixed categorical distribution, $\mathrm{Cat}( \langle 0.5, 0.5 \rangle )$ from which features are drawn. Note that we model the observations as multiple draws from a categorical distribution and not a single draw from a multinomial distribution. To use a concrete example, we will assume that there are 100 observations for our object and each observation is either term \texttt{A} or \texttt{B}. The observations are drawn from $\mathrm{Cat}(\langle 0.5, 0.5 \rangle )$ and the expected value of the feature counts of terms \texttt{A} and \texttt{B} are $y = \langle 500, 500 \rangle$. 
+
+There are three cases for the feature counts:
+ 1. $\mathrm{freq}(\mathtt{A}) = \mathrm{freq}(\mathtt{B})$
+ 2. $\mathrm{freq}(\mathtt{A}) < \mathrm{freq}(\mathtt{B})$
+ 3. $\mathrm{freq}(\mathtt{A}) > \mathrm{freq}(\mathtt{B})$
+
+The initial estimates for community parameters are the proportions of object feature counts. It is unclear if there is a better method for calculating initial estimates. Note that the estimate for both communities' parameters is the same since there is only a single object in these datasets.
+
+In the following examples exploring the three cases, assume we are attempting to optimize the parameter estimate for the first community $\Theta_{i \ast}$. We show that regardless of the random error that exists in the observations we trivially converge to the original estimated parameters.
+
+*** Case 1
+An example of Case 1:
+
+\begin{align*}
+y &= \begin{pmatrix}
+500 & 500
+\end{pmatrix}, \\
+\hat{\Theta} &= \begin{pmatrix}
+0.5 & 0.5 \\
+0.5 & 0.5
+\end{pmatrix}, \\
+\phi &= \begin{pmatrix}
+0.5 & 0.5
+\end{pmatrix}, \\
+\Theta &= \begin{pmatrix}
+0.7 & 0.3 \\
+0.3 & 0.7
+\end{pmatrix}.
+\end{align*}
+
+Since the object features were drawn from $\mathrm{Cat}(\langle 0.5, 0.5 \rangle )$ the maximum likelihood for the observations $y$ occurs when $\Theta_{1 \ast} = \langle 0.5, 0.5 \rangle$. Therefore are initial estimate for community doesn't change as it provides the maximum likelihood for $y$. Further, note that the estimate for $\Theta_{2 \ast}$ will also not change and we have converged at incorrect estimates for $\Theta$.
+
+*** Case 2
+An example of Case 2:
+
+\begin{align*}
+y &= \begin{pmatrix}
+482 & 518
+\end{pmatrix}, \\
+\hat{\Theta} &= \begin{pmatrix}
+0.48 & 0.52 \\
+0.48 & 0.52
+\end{pmatrix}, \\
+\phi &= \begin{pmatrix}
+0.5 & 0.5
+\end{pmatrix}, \\
+\Theta &= \begin{pmatrix}
+0.7 & 0.3 \\
+0.3 & 0.7
+\end{pmatrix}.
+\end{align*}
+
+Here the frequency of term \texttt{A} is slightly below term \texttt{B}. The object features are drawn from $\mathrm{Cat}(\langle 0.48, 0.52 \rangle )$. Again, the initial estimate for $\Theta_{1 \ast}$ maximizes the likelihood and thus we stop. As in Case 1, this case has the same immediate convergence at the initial estimate.
+
+*** Case 3
+This case is symmetric to Case 2.

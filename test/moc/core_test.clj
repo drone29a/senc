@@ -1,3 +1,5 @@
+(use-fixtures :once schema.test/validate-schemas)
+
 (ns moc.core-test
   (:require [clojure.test :refer :all]
             [moc.core :refer :all]))
