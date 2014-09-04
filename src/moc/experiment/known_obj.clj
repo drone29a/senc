@@ -56,57 +56,6 @@
 
 (def comm-props-mat (estimate-comms obj-feat-mat obj-memb-mat))
 
-(sm/defn comm-objective-f :- DifferentiableFunction
-  "Create objective function for single community."
-  [comm-props :- Mat
-   obj-mships :- Vec
-   obj-feat :- Vec
-   comm-idx :- Integer]
-  (mo/obj-fn (partial mo/f obj-mships obj-feat comm-props comm-idx) 
-             (conj (mo/f-dels-prop obj-mships comm-props comm-idx obj-feat)
-                   mo/f-del-l-mult)))
-
-(sm/defn comm-objective-h :- DifferentiableFunction
-  "Create objective function for single community."
-  [comm-props :- Mat
-   obj-mships :- Vec
-   obj-feat :- Vec
-   comm-idx :- Integer]
-  (mo/obj-fn (partial mo/h obj-mships obj-feat comm-props comm-idx) 
-             (conj (mo/h-dels-prop obj-mships obj-feat)
-                   mo/h-del-l-mult)))
-
-(sm/defn comm-objective-h-approx-dels :- DifferentiableFunction
-  "Create objective function for single community."
-  [comm-props :- Mat
-   obj-mships :- Vec
-   obj-feat :- Vec
-   comm-idx :- Number]
-  (let [num-vars (inc (mx/dimension-count obj-feat 0))]
-    (mo/obj-fn (partial mo/h obj-mships obj-feat comm-props comm-idx)
-               (map #(partial mo/approx-del (partial mo/h obj-mships obj-feat comm-props comm-idx) %1 %2) (range num-vars) (repeat (double 0.00001))))))
-
-(sm/defn bound :- Bound
-  [[l u] :- [(sc/one (sc/maybe Double) "l") (sc/one (sc/maybe Double) "u")]]
-  (Bound. l u))
-
-(sm/defn comm-minimizer :- Minimizer
-  [bound-pairs :- [[(sc/one (sc/maybe Double) "lower") (sc/one (sc/maybe Double) "upper")]]]
-  (doto (Minimizer.)
-    (.setBounds (map bound bound-pairs))))
-
-(def of-f (comm-objective-f comm-props-mat (mx/get-row obj-memb-mat 0) (mx/get-row obj-feat-mat 0) (int 0)))
-(def m-f (comm-minimizer (conj (vec (repeat num-dims [0.001 1.0])) [0.5 nil])))
-;(.run m-f of-f (double-array (conj (into [] (mx/get-row comm-props-mat 0)) 0.001)))
-
-(def of-h (comm-objective-h comm-props-mat (mx/get-row obj-memb-mat 0) (mx/get-row obj-feat-mat 0) (int 0)))
-(def of-h (comm-objective-h truth-props-mat (mx/get-row obj-memb-mat 0) (mx/get-row obj-feat-mat 0) (int 0)))
-(def m-h (comm-minimizer (conj (vec (repeat num-dims [0.001 1.0])) [0.001 nil])))
-
-(def of-h-a (comm-objective-h-approx-dels comm-props-mat (mx/get-row obj-memb-mat 0) (mx/get-row obj-feat-mat 0) (int 0)))
-(def m-h-a (comm-minimizer (conj (vec (repeat num-dims [(double 0.001) (double 1.0)])) 
-                                 [(double 0.0001) nil])))
-
 (defn try-it []
   (use '[moc.experiment.known-obj])
   (require '[clojure.core.matrix :as mx])
@@ -114,41 +63,11 @@
   (sc/with-fn-validation 
     (.run m-h-a of-h-a (double-array (conj (into [] (mx/get-row comm-props-mat 0)) 10000)))))
 
-; (sc/with-fn-validation (.run m-h of-h (double-array (conj (into [] (mx/get-row comm-props-mat 0)) 0.001))))
+;;; scratch
 
-;; norm.vec(c(0, 0, 0, 0.075, 0.05, 0.05, 0.025, 0.025, 0, 0)),
-;; norm.vec(c(0, 0, 0, 0.025, 0.050, 0.050, 0.075, 0.075, 0.100, 0.100)),
-;; norm.vec(c(0.3, 0.2, 0.1, 0.05, 0.05, 0, 0, 0, 0, 0))),
-
-;; Testing the moc obj
-;(.getValues of (double-array (mx/get-row comm-props-mat 0)))
-
-;; A test for l-bfgs-b wrapper
-;; This works...
-(comment (def q (proxy [DifferentiableFunction] []
-                  (getValues [pt] 
-                    (let [x (aget pt 0)]
-                      (FunctionValues. (Math/pow (+ x 4) 2)
-                                       (double-array [(* 2 (+ x 4))]))))))
-
-         (def alg (doto (Minimizer.)
-                    (.setBounds (map bound [[10.0 nil]]))))
-
-         (def result (.run alg q (double-array [40]))))
-
-;(def partials (conj (mo/f-dels-prop (mx/get-row obj-memb-mat 0) comm-props-mat 0 (mx/get-row obj-feat-mat 0)) mo/f-del-l-mult))
-;(def grad-fn (apply juxt partials))
-;(grad-fn (double-array (conj (into [] (mx/get-row comm-props-mat 0)) 0.001)))
-
-;(def o-f-fn (partial mo/f (mx/get-row obj-memb-mat 0) (mx/get-row obj-feat-mat 0) comm-props-mat 0))
-;(o-fn (double-array (conj (into [] (mx/get-row comm-props-mat 0)) 0.5)))
-
-;(def o-h-fn (partial mo/h (mx/get-row obj-memb-mat 0) (mx/get-row obj-feat-mat 0) comm-props-mat 0))
-;(o-h-fn (double-array (conj (into [] (mx/get-row comm-props-mat 0)) 0.5)))
-
-;; Debugging the coercion issue
 (comment
-  (require '[mikera.vectorz.matrix-api :as vma])
-  (import [mikera.arrayz INDArray])
-  (vma/vectorz-coerce (mx/new-matrix 3 10) (vec (repeat 3 (mx/new-vector 10))))
-  (.dimensionality (vec (repeat 3 (mx/new-vector 10)))))
+
+  (def data (load-data "/Users/matt/data/cycle_comms/1_objs-affinity.csv"
+                       "/Users/matt/data/cycle_comms/1_objs-feats.mtx"
+                       "/Users/matt/data/cycle_comms/1_objs-membership.mtx"
+                       "/Users/matt/data/cycle_comms/1_comm-params.mtx")))

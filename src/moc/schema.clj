@@ -9,3 +9,10 @@
 (def Mat
   "Any matrix"
   (sc/pred mx/matrix? 'matrix?))
+
+(def ProbVec
+  "Probabilty vector"
+  (sc/pred (fn [x] (and (mx/vec? x)
+                        (< 0.001
+                           (Math/abs (- 1 (mx/esum x))))))
+           'prob-vec?))
