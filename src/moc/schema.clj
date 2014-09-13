@@ -10,9 +10,27 @@
   "Any matrix"
   (sc/pred mx/matrix? 'matrix?))
 
+(defn prob-vec?
+  [x]
+  (and (mx/vec? x)
+       (> 0.001
+          (Math/abs (- 1 (mx/esum x))))))
 (def ProbVec
   "Probabilty vector"
-  (sc/pred (fn [x] (and (mx/vec? x)
-                        (< 0.001
-                           (Math/abs (- 1 (mx/esum x))))))
-           'prob-vec?))
+  (sc/pred prob-vec? 'prob-vec?))
+
+(defn bin-vec?
+  [x]
+  (and (mx/vec? x)
+       (every? #(or (== 1 %) (== 0 %)) (mx/eseq x))))
+(def BinVec
+  "Binary vector"
+  (sc/pred bin-vec? 'bin-vec?))
+
+(defn bin-mat?
+  [x]
+  (and (mx/matrix? x)
+       (every? #(or (== 1 %) (== 0 %)) (mx/eseq x))))
+(def BinMat
+  "Binary matrix"
+  (sc/pred bin-mat? 'bin-mat?))

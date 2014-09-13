@@ -300,3 +300,125 @@ ggplot(data.frame(dim.id=factor(c(sapply(1:10, Curry(rep, times=3)))),
                   comm.id=factor(rep(1:3, 10)),
                   prob=c(Theta.est)),
        aes(x=dim.id, y=prob, group=comm.id, fill=comm.id)) + geom_bar(stat="identity") + facet_grid(~ comm.id)
+
+
+#### Quick and dirty data generation for MoC tests
+
+comm.a.params <- c(0.7, 0.2, 0.1, 0.0, 0.0)
+comm.b.params <- c(0.7, 0.0, 0.3, 0.0, 0.0)
+comm.c.params <- c(0.3, 0.0, 0.2, 0.2, 0.3)
+comm.d.params <- c(0.4, 0.5, 0.1, 0.0, 0.0)
+comm.e.params <- c(0.1, 0.1, 0.2, 0.4, 0.2)
+
+comm.params <- matrix(c(comm.a.params,
+                        comm.b.params,
+                        comm.c.params,
+                        comm.d.params,
+                        comm.e.params),
+                      nrow=5, byrow=TRUE)
+
+num.objs.per.comm <- c(60, 30, 10, 5, 3)
+
+num.obs.per.obj <- 100
+
+## 1s and 0s, since we aren't explicitly modeling individual membership
+## We could also create random membership vectors and then randomly select some which belong
+## to each community.
+
+## Various mixing but all with equal concentration
+obj.memb.priors.1 <- matrix(c(1.0, 1.0, 0.0, 0.0, 0.0,
+                              1.0, 1.0, 1.0, 0.0, 0.0,
+                              0.0, 1.0, 1.0, 0.0, 0.0,
+                              1.0, 0.0, 0.0, 1.0, 1.0,
+                              0.0, 1.0, 0.0, 1.0, 1.0),
+                            nrow=5, byrow=TRUE)
+
+## Various mixing pattern with higher concentration of selected community
+obj.memb.priors.2 <- matrix(c(10.0, 1.0, 0.0, 0.0, 0.0,
+                              1.0, 10.0, 1.0, 0.0, 0.0,
+                              0.0, 1.0, 10.0, 0.0, 0.0,
+                              1.0, 0.0, 0.0, 10.0, 1.0,
+                              0.0, 1.0, 0.0, 1.0, 10.0),
+                            nrow=5, byrow=TRUE)
+
+DrawMemb <- function(prior, n) {
+    return(rdirichlet(n=n, alpha=prior))
+}
+
+DrawFeatVals <- function(comm.params, obj.memb, num.obs) {
+    mix.param <- obj.memb %*% comm.params
+    return(rowSums(rmultinom(n=num.obs, size=1, prob=mix.param)))
+}
+
+GenMembs <- function(priors, num.objs) {
+    membs <- list()
+    for (i in 1:length(num.objs)) {
+        membs[[i]] <- DrawMemb(priors[i,], num.objs[i])
+    }
+    return(membs)
+}
+
+GenMembs <- function(priors, num.objs) {
+    membs <- list()
+    for (i in 1:length(num.objs)) {
+        membs[[i]] <- DrawMemb(priors[i,], num.objs[i])
+    }
+    return(membs)
+}
+
+GenMembsFlat <- function(priors, num.objs) {
+    membs <- matrix(nrow=
+    for (i in 1:length(num.objs)) {
+        membs <- append(membs, unlist(DrawMemb(priors[i,], num.objs[i])))
+    }
+    return(unlist(membs))
+}
+
+GenFeatVals <- function(comm.params, obj.membs, num.obs) {
+    num.comms <- length(obj.membs)
+    feat.vals <- list() 
+    for (i in 1:num.comms) {
+        feat.vals[[i]] <- list()
+        for (j in 1:(length(obj.membs[[i]]) / num.comms)) {
+            feat.vals[[i]][[j]] <- DrawFeatVals(comm.params, obj.membs[[i]][j,], num.obs)
+        }
+    }
+    return(feat.vals)
+}
+
+GenFeatValsFlat <- function(comm.params, obj.membs, num.obs) {
+    num.comms <- length(obj.membs)
+    feat.vals <- list() 
+    for (i in 1:num.comms) {
+        for (j in 1:(length(obj.membs[[i]]) / num.comms)) {
+            feat.vals <- append(feat.vals, DrawFeatVals(comm.params, obj.membs[[i]][j,], num.obs))
+        }
+    }
+    return(matrix(feat.vals, ncol=5, byrow=TRUE))
+}
+
+
+GenData <- function(comm.params, obj.memb.priors, num.objs.per.comm) {
+    membs <- GenMembs(obj.memb.priors, num.objs.per.comm)
+    ##feat.vals <- GenFeatVals(comm.params, membs, num.obs.per.obj)
+    feat.vals <- GenFeatValsFlat(comm.params, membs, num.obs.per.obj)
+    return(list(membs=membs,
+                feat.vals=feat.vals))
+}
+
+FormatMembs <- function(obj.membs) {
+    data <- apply(obj.membs,
+                  1,
+                  function(nz.ind) {
+                      sprintf("%s %s %s", nz.ind[1], nz.ind[2], m[nz.ind[1], nz.ind[2]])
+                  })
+}
+
+FormatFeatVals <- function(feat.vals) {
+    data <- apply(feat.vals,
+                  1,
+                  function(row) {
+                      print(sprintf("%s", row))
+                  })
+    return(data)
+}

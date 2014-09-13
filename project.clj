@@ -16,4 +16,7 @@
   :native-path "native"
   :main moc.core
   :jvm-opts ["-Xmx4g" "-server" "-XX:+UseConcMarkSweepGC" "-Djava.library.path=native/"]
-  :global-vars {*warn-on-reflection* true})
+  :global-vars {*warn-on-reflection* true}
+  :test-selectors {:default (complement :slow)
+                   :slow :slow
+                   :all (constantly true)})
