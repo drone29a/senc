@@ -5,15 +5,6 @@
   (:use [moc.schema :only [Vec Mat ProbVec]]
         [moc.util :only [proportional select-rows]]))
 
-(sm/defn safe-log :- sc/Num
-  "A log function that returns zero for input value zero.
-  Simplifies working with probability vectors where zero-value
-  elements can be ignored."
-  [x :- sc/Num]
-  (if (zero? x)
-    0
-    (Math/log x)))
-
 (sm/defn solve-linear :- sc/Num
   "Solve a simple linear equation of the form y = ax + b."
   [y :- sc/Num

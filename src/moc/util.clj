@@ -43,7 +43,7 @@
   ;; TODO: Curious when/if this is much/any slower
   (comment
     (mx/inner-product (mx/sparse (mx/diagonal-matrix row-indicator)) m))
-
+  
   (loop [new-m (mx/sparse (apply mx/zero-matrix (mx/shape m)))
          row-idxs (mx/non-zero-indices row-indicator)]
     (if (empty? row-idxs)
@@ -62,3 +62,20 @@
                                  #(- % max-prob))
                            log-probs))))
 
+(sm/defn safe-log :- sc/Num
+  "A log function that returns a very small number for input value zero.
+  Simplifies working with probability vectors where zero-value
+  elements can be ignored."
+  [x :- sc/Num]
+  (if (zero? x)
+    1e-10
+    (Math/log x)))
+
+(sm/defn log-multicat :- sc/Num
+  "This is a bastardized not-quite-legit log PMF. It's essentially
+  a multinomial without the multinomial coefficient. This is useful
+  for computing relative change in likelihood for a distribution
+  we're trying to estimate."
+  [p :- Vec
+   xs :- Vec]
+  (.value (mx/inner-product xs (mx/emap safe-log p))))

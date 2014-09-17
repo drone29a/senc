@@ -17,11 +17,17 @@
           (map vector expected actual)))
 
 (deftest estimate-memb-test
-  (is (close-seq? 1e-4
-                  [0.3333 0.6666]
-                  (estimate-memb (mx/sparse [10 0 20 0 30])
-                                 (mx/sparse [[0.6 0.3 0.1 0 0]
-                                             [0 0 0.1 0.3 0.6]])))))
+  (testing "basic membership"
+    (is (close-seq? 1e-4
+                    [0.3333 0.6666]
+                    (estimate-memb (mx/sparse [10 0 20 0 30])
+                                   (mx/sparse [[0.6 0.3 0.1 0 0]
+                                               [0 0 0.1 0.3 0.6]])))))
+  (testing "merging membership vectors"
+    ;; TODO: test if estimating a group of objects directly results
+    ;; in same final membership weight as doing individually and merging
+    ;; as we do in m-step
+    ))
 
 (deftest restricted-comms-test
   (is (mx/equals (mx/matrix [[0.5 0.3 0.2]
@@ -76,30 +82,30 @@
                                          (mx/matrix [0.6
                                                      0.4]))))))
 
-(deftest other-mixed-props-test
+(deftest mixed-props-test
   (testing "trivial case when objects only belong to community being estimated"
     ;; For comm-idx 0
     (is (close-seq? 1e-2
                     [0.0 0.0 0.0]
-                    (other-mixed-props (mx/matrix [0.0 0.0 0.0])
-                                       (mx/matrix [[0.6 0.4 0.0]
-                                                   [0.3 0.7 0.0]
-                                                   [0.9 0.0 0.1]])))))
+                    (mixed-props (mx/matrix [0.0 0.0 0.0])
+                                 (mx/matrix [[0.6 0.4 0.0]
+                                             [0.3 0.7 0.0]
+                                             [0.9 0.0 0.1]])))))
   (testing "simple case"
     ;; For comm-idx 0
     (is (close-seq? 1e-2
                     [0.30 0.28 0.02]
-                    (other-mixed-props (mx/matrix [0.0 0.4 0.2])
-                                       (mx/matrix [[0.6 0.4 0.0]
-                                                   [0.3 0.7 0.0]
-                                                   [0.9 0.0 0.1]]))))
+                    (mixed-props (mx/matrix [0.0 0.4 0.2])
+                                 (mx/matrix [[0.6 0.4 0.0]
+                                             [0.3 0.7 0.0]
+                                             [0.9 0.0 0.1]]))))
     ;; For comm-idx 1
     (is (close-seq? 1e-2
                     [0.42 0.16 0.02]
-                    (other-mixed-props (mx/matrix [0.4 0.0 0.2])
-                                       (mx/matrix [[0.6 0.4 0.0]
-                                                   [0.3 0.7 0.0]
-                                                   [0.9 0.0 0.1]]))))))
+                    (mixed-props (mx/matrix [0.4 0.0 0.2])
+                                 (mx/matrix [[0.6 0.4 0.0]
+                                             [0.3 0.7 0.0]
+                                             [0.9 0.0 0.1]]))))))
 
 (deftest estimate-comm-props-test
   (testing "trivial case of estimating community parameters"
@@ -257,9 +263,13 @@
                             (concat (repeat 100 0) (repeat 5 1) (repeat 3 0))
                             (concat (repeat 105 0) (repeat 3 1))])
           init-comm-props (estimate-props feat-vals cores)
-          init-obj-membs (mx/matrix (map (fn [obj-feat-vals]
-                                           (estimate-memb obj-feat-vals init-comm-props))
-                                         feat-vals))]
+          init-obj-membs (mx/matrix (map (fn [obj-feat-vals obj-idx]
+                                           (estimate-memb obj-feat-vals
+                                                          (restricted-comms obj-groups
+                                                                            init-comm-props
+                                                                            (hash-set obj-idx))))
+                                         feat-vals
+                                         (range (mx/row-count feat-vals))))]
         (is (close-seq? 1e-3
              [0 0 0 0 0]
              (-> (run
@@ -267,7 +277,7 @@
                    obj-groups
                    init-obj-membs
                    init-comm-props
-                   50)
+                   20)
                  :comm-props
                  mx/eseq))))))
 

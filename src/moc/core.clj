@@ -5,15 +5,17 @@
             [moc.estimate.mle :as mle]
             [clojure.java.io :as io]
             [clojure.set :as set]
-            [clojure.core.matrix.impl.pprint :as mpp :refer [pm]])
+            [clojure.core.matrix.impl.pprint :as mpp :refer [pm]]
+            [notion.metric :refer [kl-cat]]
+            [clojure.pprint :refer [pprint]])
   (:use [clojure.tools.cli :only [cli]]
         [moc.community :only [community obj]]
         [munge.io.matrix-ctf :only [load-matrix save-matrix]]
         [munge.io.data-frame :only [save-data-frame]]
         [munge.io.core :only [load-ids]]
         [moc.schema :only [Vec Mat ProbVec BinVec BinMat]]
-        [notion.metric :only [kl-cat]]
-        [moc.util :only [proportional select-rows selected-rows binary-vector b-or]])
+        [moc.util :only [proportional select-rows selected-rows
+                         binary-vector b-or safe-log log-multicat]])
   (:gen-class))
 
 (mx/set-current-implementation :vectorz)
@@ -30,9 +32,11 @@
 (sm/defn restricted-objs :- Mat
   "A convenience function for restricting object feature matrix to
   those objects belonging to the community's seed subgraph."
-  [comm-objs :- BinMat
-   obj-feats :- Mat]
-  )
+  [obj-groups :- BinMat
+   obj-feats :- Mat
+   comm-idx :- sc/Int]
+  (->> (mx/get-column obj-groups comm-idx)
+       (selected-rows obj-feats)))
 
 (sm/defn restricted-comms :- Mat
   "A convenience function for restricting the community params
@@ -51,6 +55,8 @@
                   core-objs-vecs)))
 
 (sm/defn estimate-memb :- Vec
+  "Note: use a filtered comm-params matrix if you want to force zero membership 
+  in some communities."
   [obj-feats :- Vec
    comm-params :- Mat]
   ;; Calculate probability of object from weighted counts for all communities
@@ -88,7 +94,7 @@
   (mx/mmul obj-prop-num-obs objs-membs))
 
 ;; Theta_c!=i
-(sm/defn other-mixed-props :- Vec
+(sm/defn mixed-props :- Vec
   "The subgraph-memb is almost a ProbVec but the element corresponding the community being estimated
   will be zero.
 
@@ -129,7 +135,7 @@
 
         ;; TODO: is it correct to mix communities according to per-object membership
         ;; but weighting it based on total number of object features?
-        other-props (other-mixed-props (mx/mset subgraph-memb comm-idx 0) subset-comm-props)]
+        other-props (mixed-props (mx/mset subgraph-memb comm-idx 0) subset-comm-props)]
 
     (comment    (clojure.pprint/pprint subgraph-memb)
                 (clojure.pprint/pprint seed-objs-feats)
@@ -140,6 +146,38 @@
                              other-props
                              (mx/mget subgraph-memb comm-idx))))
 
+(sm/defn score-params :- Vec
+  [obj-groups :- BinMat
+   obj-feats :- Mat
+   comm-props :- Mat]
+  (mx/matrix (map log-multicat
+                  (mx/rows comm-props)
+                  (map (comp (partial reduce mx/add)
+                             (partial restricted-objs obj-groups obj-feats))
+                       (range (mx/row-count comm-props))))))
+
+(sm/defn alt-mixed-prop :- ProbVec
+  "Create a mixture distribution given a set of objects, their membership weights,
+  and community feature distributions."
+  [obj-groups :- BinMat
+   obj-feats :- Mat
+   obj-membs :- Mat
+   comm-props :- Mat
+   comm-idx :- sc/Int]
+  (let [seed-objs (mx/get-column obj-groups comm-idx) ; objs part of the selected community seed subgraph
+        subset-comm-props (selected-rows comm-props
+                                         (apply b-or (selected-rows obj-groups seed-objs))) 
+        seed-objs-feats (reduce mx/add (selected-rows obj-feats seed-objs))
+        
+        ;; contribution proportion based on number of features per-object
+        obj-prop-num-obs (proportional (reduce mx/add
+                                               (mx/columns (selected-rows obj-feats
+                                                                          seed-objs))))
+        ;; the complete phi vector
+        subgraph-memb (subgraph-membership (selected-rows obj-membs seed-objs)
+                                           obj-prop-num-obs)]
+    (mx/mmul subgraph-memb subset-comm-props)))
+
 (sm/defn m-step :- Mat
   "Calculate new community topic distribution parameters.
   The select-objs fn can be used to specify which objects should
@@ -149,8 +187,36 @@
    obj-membs :- Mat
    obj-feats :- Mat
    comm-props :- Mat]
-  (mx/matrix (map (partial estimate-comm-props obj-groups obj-membs obj-feats comm-props)
-                  (range (mx/row-count comm-props)))))
+  (comment (mx/matrix (map (partial estimate-comm-props obj-groups obj-membs obj-feats comm-props)
+                           (range (mx/row-count comm-props)))))
+
+  ;; Keep only the improvements. Is this nonsensical?
+  (let [scorer (partial score-params obj-groups obj-feats)
+        new-props (map (partial estimate-comm-props obj-groups obj-membs obj-feats comm-props)
+                       (range (mx/row-count comm-props)))
+        old-mixed-props (mx/matrix (map (partial alt-mixed-prop obj-groups obj-feats obj-membs comm-props)
+                                                 (range (mx/row-count comm-props))))
+        new-mixed-props (mx/matrix (map (fn [comm-idx]
+                                          (alt-mixed-prop obj-groups
+                                                          obj-feats
+                                                          obj-membs
+                                                          new-props
+                                                          ;; (mx/set-row comm-props
+                                                          ;;             comm-idx
+                                                          ;;             (mx/get-row new-props comm-idx))
+                                                          comm-idx))
+                                        (range (mx/row-count comm-props))))]
+    (comment    (println "Actual and mixed used for scoring:")
+                (println (pm comm-props))
+                (println (pm old-mixed-props))
+                (println (pm new-props))
+                (println (pm new-mixed-props)))
+    (mx/matrix (map (fn [[old-score old-v] [new-score new-v]]
+                      (if (>= old-score new-score)
+                        (do (println "OLD") old-v)
+                        (do (println "NEW") new-v)))
+                    (map vector (scorer old-mixed-props) comm-props)
+                    (map vector (scorer new-mixed-props) new-props)))))
 
 (sm/defn run
   "Run the algorithm. Main calls this, so can you.
@@ -169,9 +235,12 @@
     (loop [membs obj-membs
            props comm-props
            iter-count 0]
+
       (println "Iteration: " iter-count)
       (println "Comm. properties:")
       (println (pm props))
+      (pprint (score-params obj-groups obj-feats props))
+      
       (if (= max-iter iter-count)      
         {:obj-membs membs
          :comm-props props}
@@ -204,6 +273,7 @@
                                            (format "%s/objs-feats.mtx" input-path)
                                            (format "%s/objs-membership.mtx" input-path))
                     initial-comm-props (estimate-props obj-feats cores)
+                    ;; TODO: THIS IS FOR A SINGLE OBJECT, WHAT ARE YOU DOING?!?!?!?!
                     initial-obj-membs (estimate-memb obj-feats initial-comm-props)
                     obj-groups nil
                     est-props (run
