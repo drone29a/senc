@@ -422,3 +422,13 @@ FormatFeatVals <- function(feat.vals) {
                   })
     return(data)
 }
+
+### Data was generated with:
+    ## set.seed(1001)
+    ## > GenData <- function(comm.params, obj.memb.priors, num.objs.per.comm) {
+    ## +     membs <- GenMembs(obj.memb.priors, num.objs.per.comm)
+    ## +     ##feat.vals <- GenFeatVals(comm.params, membs, num.obs.per.obj)
+    ## +     feat.vals <- GenFeatValsFlat(comm.params, membs, num.obs.per.obj)
+    ## +     return(list(membs=membs,
+    ## +                 feat.vals=feat.vals))
+    ## + }
