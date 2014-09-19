@@ -1,9 +1,10 @@
 (ns moc.core-test
   (:require [clojure.test :refer :all]
             [moc.core :refer :all]
-            [moc.util :refer [proportional]]
+            [moc.util :refer [proportional selected-rows]]
             [clojure.core.matrix :as mx]
-            [schema.test]))
+            [schema.test]
+            [clojure.core.matrix.impl.pprint :as mpp :refer [pm]]))
 
 (use-fixtures :once schema.test/validate-schemas)
 
@@ -22,7 +23,28 @@
                     [0.3333 0.6666]
                     (estimate-memb (mx/sparse [10 0 20 0 30])
                                    (mx/sparse [[0.6 0.3 0.1 0 0]
-                                               [0 0 0.1 0.3 0.6]])))))
+                                               [0 0 0.1 0.3 0.6]]))))
+    (is (close-seq? 1e-4
+                    [0 0.477 0.523 0 0]
+                    (estimate-memb (mx/matrix [51 0 20 8 21])
+                                   (selected-rows (mx/matrix [[0.7 0.2 0.1 0 0]
+                                                              [0.7 0 0.3 0 0]
+                                                              [0.3 0 0.2 0.2 0.3]
+                                                              [0.4 0.5 0.1 0 0]
+                                                              [0.1 0.1 0.2 0.4 0.2]])
+                                                  (mx/matrix [0 1 1 0 0]))))))
+
+  (testing "disjoint features"
+    (is (mx/equals [0.5 0.5]
+                   (estimate-memb (mx/sparse [10 5 10 5])
+                                  (mx/sparse [[0.9 0.1 0 0]
+                                              [0 0 0.9 0.1]]))))
+    (testing "feature count changes the mix"
+      (is (mx/equals [0.75 0.25]
+                     (estimate-memb (mx/sparse [10 5 3 2])
+                                    (mx/sparse [[0.9 0.1 0 0]
+                                                [0 0 0.9 0.1]]))))))
+ 
   (testing "merging membership vectors"
     ;; TODO: test if estimating a group of objects directly results
     ;; in same final membership weight as doing individually and merging
@@ -279,7 +301,153 @@
                    init-comm-props
                    20)
                  :comm-props
-                 mx/eseq))))))
+                 mx/eseq))))))  
+
+;; num object groups = 5
+;; num comms = 5
+;; num features = 6
+;; generated with seed at 1001
+(deftest ^:slow run-new-uniform-test
+  (testing "simple set of communities and objects"
+    (let [feat-vals (mx/matrix [[73 19 8 0 0]   
+                                [66 17 17 0 0]   
+                                [80 4 16 0 0]   
+                                [72 7 21 0 0]   
+                                [70 10 20 0 0]   
+                                [79 5 16 0 0]   
+                                [63 18 19 0 0]   
+                                [68 3 29 0 0]   
+                                [70 5 25 0 0]   
+                                [65 15 20 0 0]   
+                                [71 17 12 0 0]   
+                                [72 5 23 0 0]   
+                                [77 2 21 0 0]   
+                                [76 12 12 0 0]   
+                                [70 15 15 0 0]   
+                                [67 11 22 0 0]   
+                                [70 0 30 0 0]   
+                                [81 9 10 0 0]   
+                                [71 18 11 0 0]   
+                                [71 8 21 0 0]   
+                                [65 13 22 0 0]   
+                                [69 5 26 0 0]   
+                                [66 21 13 0 0]   
+                                [66 7 27 0 0]   
+                                [69 18 13 0 0]   
+                                [75 15 10 0 0]   
+                                [69 5 26 0 0]   
+                                [67 27 6 0 0]   
+                                [79 2 19 0 0]   
+                                [68 18 14 0 0]   
+                                [74 5 21 0 0]   
+                                [69 11 20 0 0]   
+                                [63 18 19 0 0]   
+                                [76 3 21 0 0]   
+                                [70 13 17 0 0]   
+                                [69 5 26 0 0]   
+                                [73 1 26 0 0]   
+                                [70 7 23 0 0]   
+                                [74 8 18 0 0]   
+                                [77 8 15 0 0]   
+                                [63 4 33 0 0]   
+                                [69 7 24 0 0]   
+                                [73 21 6 0 0]   
+                                [64 11 25 0 0]   
+                                [67 12 21 0 0]   
+                                [70 14 16 0 0]   
+                                [75 9 16 0 0]   
+                                [77 10 13 0 0]   
+                                [70 0 30 0 0]   
+                                [72 6 22 0 0]   
+                                [73 8 19 0 0]   
+                                [76 2 22 0 0]   
+                                [74 19 7 0 0]   
+                                [63 22 15 0 0]   
+                                [61 27 12 0 0]   
+                                [64 22 14 0 0]   
+                                [66 8 26 0 0]   
+                                [73 17 10 0 0]   
+                                [73 6 21 0 0]   
+                                [70 6 24 0 0]   
+                                [66 0 29 1 4]   
+                                [53 6 20 12 9]   
+                                [50 3 18 8 21]  
+                                [48 5 29 9 9]   
+                                [74 7 15 3 1]   
+                                [59 11 21 6 3]   
+                                [68 4 14 7 7]   
+                                [70 0 23 4 3]   
+                                [48 2 25 9 16]  
+                                [59 9 13 4 15]  
+                                [41 0 26 15 18]  
+                                [62 7 27 2 2]   
+                                [43 6 17 14 20]  
+                                [46 3 19 15 17]  
+                                [55 5 20 8 12]  
+                                [37 1 27 12 23]  
+                                [64 2 21 6 7]   
+                                [63 18 16 0 3]   
+                                [50 9 14 9 18]  
+                                [62 15 14 2 7]   
+                                [47 1 22 12 18]  
+                                [69 3 25 2 1]   
+                                [58 13 14 8 7]   
+                                [63 7 20 4 6]   
+                                [64 1 22 9 4]   
+                                [69 11 17 0 3]   
+                                [49 9 26 11 5]   
+                                [63 12 21 1 3]   
+                                [72 0 25 1 2]   
+                                [44 2 16 17 21]  
+                                [51 0 20 8 21]  
+                                [58 0 28 7 7]   
+                                [34 0 32 10 24]  
+                                [57 0 24 6 13]  
+                                [47 0 14 13 26]  
+                                [69 0 28 0 3]   
+                                [43 0 19 15 23]  
+                                [42 0 26 10 22]  
+                                [66 0 29 2 3]   
+                                [64 0 30 2 4]   
+                                [65 28 7 0 0]   
+                                [47 31 12 5 5]   
+                                [29 28 11 18 14]  
+                                [26 26 18 21 9]   
+                                [30 14 17 27 12]  
+                                [20 16 17 28 19]  
+                                [34 25 15 16 10]  
+                                [34 11 21 23 11]])
+          obj-groups (mx/matrix (concat (repeat 60 [1 1 0 0 0])
+                                        (repeat 30 [1 1 1 0 0])
+                                        (repeat 10 [0 1 1 0 0])
+                                        (repeat 5 [1 0 0 1 1])
+                                        (repeat 3 [0 1 0 1 1])))
+          cores (mx/matrix [(concat (repeat 60 1) (repeat 48 0))
+                            (concat (repeat 60 0) (repeat 30 1) (repeat 18 0))
+                            (concat (repeat 90 0) (repeat 10 1) (repeat 8 0))
+                            (concat (repeat 100 0) (repeat 5 1) (repeat 3 0))
+                            (concat (repeat 105 0) (repeat 3 1))])
+          init-comm-props (estimate-props feat-vals cores)
+          init-obj-membs (mx/matrix (map (fn [obj-feat-vals obj-idx]
+                                           (estimate-memb obj-feat-vals
+                                                          (restricted-comms obj-groups
+                                                                            init-comm-props
+                                                                            (hash-set obj-idx))))
+                                         feat-vals
+                                         (range (mx/row-count feat-vals))))
+          result (run
+                   feat-vals 
+                   obj-groups
+                   init-obj-membs
+                   init-comm-props
+                   50)]
+      (println (pm (:obj-membs result)))
+      (is (close-seq? 1e-3
+                      [0 0 0 0 0]
+                      (-> result
+                          :comm-props
+                          mx/eseq))))))
+
 
 (deftest ^:slow run-select-heavy-test
   (testing "simple set of communities and objects"

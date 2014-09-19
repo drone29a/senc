@@ -61,6 +61,7 @@
    comm-params :- Mat]
   ;; Calculate probability of object from weighted counts for all communities
   (->> (map proportional (mx/columns comm-params))
+       ;;(mx/columns comm-params)
        (map (sm/fn [term-count :- sc/Num
                     weight-col :- Vec]
               (mx/emul term-count weight-col))
@@ -206,11 +207,6 @@
                                                           ;;             (mx/get-row new-props comm-idx))
                                                           comm-idx))
                                         (range (mx/row-count comm-props))))]
-    (comment    (println "Actual and mixed used for scoring:")
-                (println (pm comm-props))
-                (println (pm old-mixed-props))
-                (println (pm new-props))
-                (println (pm new-mixed-props)))
     (mx/matrix (map (fn [[old-score old-v] [new-score new-v]]
                       (if (>= old-score new-score)
                         (do (println "OLD") old-v)
@@ -237,6 +233,8 @@
            iter-count 0]
 
       (println "Iteration: " iter-count)
+      (println "Membership weights:")
+      (println (pm membs))
       (println "Comm. properties:")
       (println (pm props))
       (pprint (score-params obj-groups obj-feats props))
