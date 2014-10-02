@@ -18,32 +18,39 @@
           (map vector expected actual)))
 
 (deftest estimate-memb-test
+  (testing "object is member of only one group"
+    (is (close-seq? 1e-3
+                    [1.0 0.0]
+                    (estimate-memb (new-sparse-indexed-vector [10 0 0])
+                                   (selected-rows (new-sparse-matrix [[0.4 0.4 0.2]
+                                                                      [0.1 0.8 0.1]])
+                                                  (new-sparse-indexed-vector [1 0]))))))
   (testing "basic membership"
     (is (close-seq? 1e-4
                     [0.3333 0.6666]
-                    (estimate-memb (mx/sparse [10 0 20 0 30])
-                                   (mx/sparse [[0.6 0.3 0.1 0 0]
-                                               [0 0 0.1 0.3 0.6]]))))
+                    (estimate-memb (new-sparse-indexed-vector [10 0 20 0 30])
+                                   (new-sparse-matrix [[0.6 0.3 0.1 0 0]
+                                                       [0 0 0.1 0.3 0.6]]))))
     (is (close-seq? 1e-4
                     [0 0.477 0.523 0 0]
-                    (estimate-memb (mx/matrix [51 0 20 8 21])
-                                   (selected-rows (mx/matrix [[0.7 0.2 0.1 0 0]
-                                                              [0.7 0 0.3 0 0]
-                                                              [0.3 0 0.2 0.2 0.3]
-                                                              [0.4 0.5 0.1 0 0]
-                                                              [0.1 0.1 0.2 0.4 0.2]])
-                                                  (mx/matrix [0 1 1 0 0]))))))
+                    (estimate-memb (new-sparse-indexed-vector [51 0 20 8 21])
+                                   (selected-rows (new-sparse-matrix [[0.7 0.2 0.1 0 0]
+                                                                      [0.7 0 0.3 0 0]
+                                                                      [0.3 0 0.2 0.2 0.3]
+                                                                      [0.4 0.5 0.1 0 0]
+                                                                      [0.1 0.1 0.2 0.4 0.2]])
+                                                  (new-sparse-indexed-vector [0 1 1 0 0]))))))
 
   (testing "disjoint features"
     (is (mx/equals [0.5 0.5]
-                   (estimate-memb (mx/sparse [10 5 10 5])
-                                  (mx/sparse [[0.9 0.1 0 0]
-                                              [0 0 0.9 0.1]]))))
+                   (estimate-memb (new-sparse-indexed-vector [10 5 10 5])
+                                  (new-sparse-matrix [[0.9 0.1 0 0]
+                                                         [0 0 0.9 0.1]]))))
     (testing "feature count changes the mix"
       (is (mx/equals [0.75 0.25]
-                     (estimate-memb (mx/sparse [10 5 3 2])
-                                    (mx/sparse [[0.9 0.1 0 0]
-                                                [0 0 0.9 0.1]]))))))
+                     (estimate-memb (new-sparse-indexed-vector [10 5 3 2])
+                                    (new-sparse-matrix [[0.9 0.1 0 0]
+                                                           [0 0 0.9 0.1]]))))))
  
   (testing "merging membership vectors"
     ;; TODO: test if estimating a group of objects directly results
@@ -61,7 +68,13 @@
                                    (mx/matrix [[0.5 0.3 0.2]
                                                [0.7 0.1 0.2]
                                                [0.4 0.4 0.2]])
-                                   #{0 1}))))
+                                   #{0 1})))
+  (is (mx/equals (mx/matrix [[0.5 0.2 0.3]
+                             [0.0 0.0 0.0]])
+                 (restricted-comms (mx/matrix [[1 0]])
+                                   (mx/matrix [[0.5 0.2 0.3]
+                                               [0.1 0.1 0.8]])
+                                   #{0}))))
 
 (deftest e-step-test
   (testing "trivial case of single membership"
@@ -99,7 +112,7 @@
   (testing "trivial case"
     (is (close-seq? 1e-2
                     [0.84 0.12 0.04]
-                    (subgraph-membership (mx/matrix [[1.0 0 0]
+                    (subgraph-membership (mx/matrix [[1.0 0.0 0.0]
                                                      [0.6 0.3 0.1]])
                                          (mx/matrix [0.6
                                                      0.4]))))))
@@ -160,6 +173,40 @@
                                                               [0 0 0.6 0.4]
                                                               [0 0 0.3 0.7]])
                                                   0))))))
+
+(deftest alt-mixed-prop-test
+  (testing "basic case"
+    (is (close-seq? 1e-2
+                    [0.5 0.3 0.2 0.0]
+                    (alt-mixed-prop (mx/matrix [[1 0 0]
+                                                [0 1 0]
+                                                [0 0 1]])
+                                    (mx/matrix [[50 25 25 0]
+                                                [10 10 10 10]
+                                                [10 20 30 40]])
+                                    (mx/matrix [[1.0 0.0 0.0]
+                                                [0.0 1.0 0.0]
+                                                [0.0 0.0 1.0]])
+                                    (mx/matrix [[0.5 0.3 0.2 0.0]
+                                                [0.25 0.25 0.25 0.25]
+                                                [0.1 0.2 0.3 0.4]])
+                                    0))))
+  (testing "simple mixture"
+    (is (close-seq? 1e-2
+                    [0.375 0.275 0.225 0.125]
+                    (alt-mixed-prop (mx/matrix [[1 1 0]
+                                                [0 1 0]
+                                                [0 0 1]])
+                                    (mx/matrix [[50 25 25 0]
+                                                [10 10 10 10]
+                                                [10 20 30 40]])
+                                    (mx/matrix [[0.5 0.5 0.0]
+                                                [0.0 1.0 0.0]
+                                                [0.0 0.0 1.0]])
+                                    (mx/matrix [[0.5 0.3 0.2 0.0]
+                                                [0.25 0.25 0.25 0.25]
+                                                [0.1 0.2 0.3 0.4]])
+                                    0)))))
 
 ;; num object groups = 5
 ;; num comms = 5
@@ -300,7 +347,7 @@
                    init-obj-membs
                    init-comm-props
                    20)
-                 :comm-props
+                 :comms-props
                  mx/eseq))))))  
 
 ;; num object groups = 5
@@ -445,7 +492,7 @@
       (is (close-seq? 1e-3
                       [0 0 0 0 0]
                       (-> result
-                          :comm-props
+                          :comms-props
                           mx/eseq))))))
 
 
@@ -570,9 +617,12 @@
                             (concat (repeat 100 0) (repeat 5 1) (repeat 3 0))
                             (concat (repeat 105 0) (repeat 3 1))])
           init-comm-props (estimate-props feat-vals cores)
-          init-obj-membs (mx/matrix (map (fn [obj-feat-vals]
-                                           (estimate-memb obj-feat-vals init-comm-props))
-                                         feat-vals))]
+          init-obj-membs (mx/matrix (map (fn [obj-idx]
+                                           (estimate-memb (mx/get-row feat-vals obj-idx)
+                                                          (restricted-comms obj-groups
+                                                                            init-comm-props
+                                                                            (hash-set obj-idx))))
+                                         (range (mx/row-count feat-vals))))]
         (is (close-seq? 1e-3
              [0 0 0 0 0]
              (-> (run
@@ -581,5 +631,5 @@
                    init-obj-membs
                    init-comm-props
                    50)
-                 :comm-props
+                 :comms-props
                  mx/eseq))))))

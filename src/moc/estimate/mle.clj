@@ -20,6 +20,7 @@
   mixing weight of the community being estimated are 
   provided."
   [obs :- Vec
+   ;; TODO: when other-props isn't ProbVec is it all zeros? make a ZeroVec?
    other-props :- (sc/either ProbVec Vec)
    mix-weight :- sc/Num]
   (comment (mx/matrix (map (fn [y a b]
@@ -36,9 +37,9 @@
   ;; final proportional needed when there were negative values from subtracting the
   ;; proportion of observed feature values by the mixed other community parameters
   (->> (-> (proportional obs)
-           (mx/sub other-props)
-           (mx/div mix-weight))
-       (map (partial max 0))
+           (mx/sub! other-props)
+           (mx/div! mix-weight))
+       (mx/emap! (partial max 0))
        (proportional)))
 
 (sm/defn estimate-comm :- Vec

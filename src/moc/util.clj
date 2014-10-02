@@ -2,15 +2,50 @@
   (:require [clojure.core.matrix :as mx]
             [schema.core :as sc]
             [schema.macros :as sm])
-  (:use [moc.schema :only [Vec Mat ProbVec BinVec]]))
+  (:use [moc.schema :only [Vec Mat ProbVec BinVec]])
+  (:import [mikera.matrixx.impl SparseRowMatrix]))
+
+(set! *warn-on-reflection* true)
+
+(comment (defprotocol PSparseRows
+           "Protocol for selecting "
+           (non-zero-rows [m] "gets rows with non-zero elements and returns a map of row index to row vector"))
+
+         (extend-protocol PSparseRows
+           SparseRowMatrix
+           (non-zero-rows
+             [m]
+             (let [nzi (mx/non-zero-indices m)
+                   num-inds (count nzi)]
+               (loop [rows {}
+                      i 0]
+                 (if (<= num-inds i)
+                   rows
+                   (let [row-idx (nth nzi i)
+                         row (.getRow m row-idx)]
+                     (recur (assoc rows row-idx row)
+                            (inc i)))))))))
 
 (sm/defn proportional :- Vec
   "Normalize vector by L1-norm."
   [v :- Vec]
-  (let [l1-norm (mx/ereduce (fn [sum x] (+ sum (Math/abs x))) v)]
+  (comment (mx/ereduce (fn [sum
+                            x]
+                         (+ sum (Math/abs (double x)))) v))
+  (let [^ints nz-idxs (mx/non-zero-indices v)
+        ;; TODO: non-zero-indices isn't guaranteed to return int[],
+        ;;       but it does for the sparse data types and we want speeeeed
+        num-idxs (alength nz-idxs)
+        l1-norm (loop [idx (int 0)
+                       sum (double 0.0)]
+                  (if (> num-idxs idx)
+                    (recur (inc idx)
+                           (+ sum (Math/abs (double (mx/mget v (aget nz-idxs idx))))))
+                    sum))]
     (if (zero? l1-norm)
       v
-      (mx/div v l1-norm))))
+      (do (mx/div! v l1-norm)
+          v))))
 
 (sm/defn binary-vector :- BinVec
   "Create a binary vector with ones corresponding to given indices."
@@ -43,13 +78,12 @@
   ;; TODO: Curious when/if this is much/any slower
   (comment
     (mx/inner-product (mx/sparse (mx/diagonal-matrix row-indicator)) m))
-  
-  (loop [new-m (mx/sparse (apply mx/zero-matrix (mx/shape m)))
-         row-idxs (mx/non-zero-indices row-indicator)]
-    (if (empty? row-idxs)
-      (mx/sparse new-m)
-      (recur (mx/set-row new-m (first row-idxs) (mx/get-row m (first row-idxs)))
-             (rest row-idxs)))))
+
+  (let [[nrows ncols] (mx/shape m)
+        new-m (SparseRowMatrix/create nrows ncols)]
+    (doseq [row-idx (mx/non-zero-indices row-indicator)]
+      (mx/set-row! new-m row-idx (mx/get-row m row-idx)))
+    new-m))
 
 (sm/defn normalize-log-prob :- ProbVec
   "Normalize log probabilities and return as plain probabilities.
@@ -78,4 +112,4 @@
   we're trying to estimate."
   [p :- Vec
    xs :- Vec]
-  (.value (mx/inner-product xs (mx/emap safe-log p))))
+  (mx/mget ^mikera.vectorz.AScalar (mx/inner-product xs (mx/emap safe-log p))))
