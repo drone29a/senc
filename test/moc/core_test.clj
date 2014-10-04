@@ -58,6 +58,22 @@
     ;; as we do in m-step
     ))
 
+(deftest estimate-membs-test
+  (testing "basic"
+    (is (mx/equals (mx/matrix [[1.0 0.0]
+                               [0.0 0.0]
+                               [0.0 1.0]])
+                   (estimate-membs (mx/matrix [[30 20 10]
+                                               [10 10 10]
+                                               [20 50 10]])
+                                   (mx/matrix [[1 0]
+                                               [1 1]
+                                               [0 1]])
+                                   (mx/matrix [[0.5 0.3 0.2]
+                                               [0.25 0.6 0.15]])
+                                   [0 2])
+                   1e-2))))
+
 (deftest restricted-comms-test
   (is (mx/equals (mx/matrix [[0.5 0.3 0.2]
                              [0.7 0.1 0.2]
@@ -148,6 +164,8 @@
                     [0.66 0.33 0 0]
                     (mx/eseq (estimate-comm-props (mx/matrix [[1 0]
                                                               [0 1]])
+                                                  (mx/matrix [[1 0]
+                                                              [0 1]])
                                                   (mx/matrix [[1.0 0]
                                                               [0 1.0]])
                                                   (mx/matrix [[10 5 0 0]
@@ -160,7 +178,10 @@
             not were overaccoutned for by other community distributions"
     (is (close-seq? 1e-2
                     [0.69 0.31 0.0 0.0]
-                    (mx/eseq (estimate-comm-props (mx/matrix [[1 0 0]
+                    (mx/eseq (estimate-comm-props (mx/matrix [[1 0 1]
+                                                              [0 0 0]
+                                                              [0 1 1]])
+                                                  (mx/matrix [[1 0 0]
                                                               [0 0 1]
                                                               [1 0 1]])
                                                   (mx/matrix [[1.0 0 0]
@@ -181,6 +202,9 @@
                     (alt-mixed-prop (mx/matrix [[1 0 0]
                                                 [0 1 0]
                                                 [0 0 1]])
+                                    (mx/matrix [[1 0 0]
+                                                [0 1 0]
+                                                [0 0 1]])
                                     (mx/matrix [[50 25 25 0]
                                                 [10 10 10 10]
                                                 [10 20 30 40]])
@@ -194,7 +218,10 @@
   (testing "simple mixture"
     (is (close-seq? 1e-2
                     [0.375 0.275 0.225 0.125]
-                    (alt-mixed-prop (mx/matrix [[1 1 0]
+                    (alt-mixed-prop (mx/matrix [[1 0 0]
+                                                [1 1 0]
+                                                [0 0 1]])
+                                    (mx/matrix [[1 1 0]
                                                 [0 1 0]
                                                 [0 0 1]])
                                     (mx/matrix [[50 25 25 0]
@@ -326,6 +353,8 @@
                                         (repeat 10 [0 1 1 0 0])
                                         (repeat 5 [1 0 0 1 1])
                                         (repeat 3 [0 1 0 1 1])))
+          ;; NOTE: not usually the case this is the transpose
+          groups-objs (mx/transpose obj-groups)
           cores (mx/matrix [(concat (repeat 60 1) (repeat 48 0))
                             (concat (repeat 60 0) (repeat 30 1) (repeat 18 0))
                             (concat (repeat 90 0) (repeat 10 1) (repeat 8 0))
@@ -339,16 +368,17 @@
                                                                             (hash-set obj-idx))))
                                          feat-vals
                                          (range (mx/row-count feat-vals))))]
-        (is (close-seq? 1e-3
-             [0 0 0 0 0]
-             (-> (run
-                   feat-vals 
-                   obj-groups
-                   init-obj-membs
-                   init-comm-props
-                   20)
-                 :comms-props
-                 mx/eseq))))))  
+      (is (close-seq? 1e-2
+                      '(0.703 0.138 0.159 0.0 0.0 0.605 0.086 0.190 0.049 0.069 0.462 0.001 0.253 0.103 0.178 0.272 0.505 0.079 0.099 0.044 0.289 0.309 0.167 0.170 0.063)
+                      (-> (run
+                            feat-vals
+                            groups-objs
+                            obj-groups
+                            init-obj-membs
+                            init-comm-props
+                            20)
+                          :comms-props
+                          mx/eseq))))))  
 
 ;; num object groups = 5
 ;; num comms = 5
@@ -474,6 +504,8 @@
                             (concat (repeat 90 0) (repeat 10 1) (repeat 8 0))
                             (concat (repeat 100 0) (repeat 5 1) (repeat 3 0))
                             (concat (repeat 105 0) (repeat 3 1))])
+          ;; NOTE: not usually the case this is the transpose
+          groups-objs (mx/transpose obj-groups)
           init-comm-props (estimate-props feat-vals cores)
           init-obj-membs (mx/matrix (map (fn [obj-feat-vals obj-idx]
                                            (estimate-memb obj-feat-vals
@@ -483,14 +515,15 @@
                                          feat-vals
                                          (range (mx/row-count feat-vals))))
           result (run
-                   feat-vals 
+                   feat-vals
+                   groups-objs
                    obj-groups
                    init-obj-membs
                    init-comm-props
                    50)]
       (println (pm (:obj-membs result)))
-      (is (close-seq? 1e-3
-                      [0 0 0 0 0]
+      (is (close-seq? 1e-2
+                      '(0.706 0.107 0.188 0.0 0.0 0.572 0.057 0.205 0.070 0.095 0.531 0.0 0.25 0.073 0.146 0.394 0.254 0.13 0.142 0.08 0.293 0.173 0.176 0.223 0.133)
                       (-> result
                           :comms-props
                           mx/eseq))))))
@@ -611,6 +644,8 @@
                                         (repeat 10 [0 1 1 0 0])
                                         (repeat 5 [1 0 0 1 1])
                                         (repeat 3 [0 1 0 1 1])))
+          ;; NOTE: not usually the case this is the transpose
+          groups-objs (mx/transpose obj-groups)
           cores (mx/matrix [(concat (repeat 60 1) (repeat 48 0))
                             (concat (repeat 60 0) (repeat 30 1) (repeat 18 0))
                             (concat (repeat 90 0) (repeat 10 1) (repeat 8 0))
@@ -623,13 +658,14 @@
                                                                             init-comm-props
                                                                             (hash-set obj-idx))))
                                          (range (mx/row-count feat-vals))))]
-        (is (close-seq? 1e-3
-             [0 0 0 0 0]
-             (-> (run
-                   feat-vals 
-                   obj-groups
-                   init-obj-membs
-                   init-comm-props
-                   50)
-                 :comms-props
-                 mx/eseq))))))
+      (is (close-seq? 1e-2
+                      '(0.706 0.181 0.113 0.0 0.0 0.669 0.016 0.277 0.018 0.02 0.323 0.0 0.24 0.158 0.279 0.356 0.472 0.122 0.032 0.018 0.193 0.166 0.203 0.293 0.143)
+                      (-> (run
+                            feat-vals
+                            groups-objs
+                            obj-groups
+                            init-obj-membs
+                            init-comm-props
+                            50)
+                          :comms-props
+                          mx/eseq))))))

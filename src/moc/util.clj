@@ -29,9 +29,6 @@
 (sm/defn proportional :- Vec
   "Normalize vector by L1-norm."
   [v :- Vec]
-  (comment (mx/ereduce (fn [sum
-                            x]
-                         (+ sum (Math/abs (double x)))) v))
   (let [^ints nz-idxs (mx/non-zero-indices v)
         ;; TODO: non-zero-indices isn't guaranteed to return int[],
         ;;       but it does for the sparse data types and we want speeeeed
