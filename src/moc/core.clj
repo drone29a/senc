@@ -57,6 +57,10 @@
       (aset nz-data i (aget data (aget nz-inds i))))
     (SparseIndexedVector/wrap n nz-inds nz-data)))
 
+(sm/defn create-sparse-indexed-vector :- Vec
+  [length :- sc/Int]
+  (SparseIndexedVector/createLength length))
+
 (sm/defn new-sparse-matrix :- Mat
   [rows :- [[sc/Num]]]
   (new-sparse-row-matrix (map new-sparse-indexed-vector rows)))
