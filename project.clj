@@ -15,7 +15,7 @@
                   :native-prefix ""]]
   :native-path "native"
   :main moc.core
-  :jvm-opts ["-agentpath:/Applications/YourKit_Java_Profiler_2014_build_14104.app/bin/mac/libyjpagent.jnilib"
+  :jvm-opts ["-agentpath:/Applications/YourKit_Java_Profiler_2014_build_14108.app/Contents/Resources/bin/mac/libyjpagent.jnilib"
              "-Xdebug" "-Xmx8g" "-server" "-XX:+UseConcMarkSweepGC" "-Djava.library.path=native/"]
 ;;  :jvm-opts ["-Xmx8g" "-server" "-XX:+UseConcMarkSweepGC" "-Djava.library.path=native/"]
   :global-vars {*warn-on-reflection* true}

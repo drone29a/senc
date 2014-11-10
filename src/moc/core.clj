@@ -195,8 +195,10 @@
    objs-feats :- Mat
    comms-params :- Mat]
   ;; TODO: Make cleaner? This is a little goofy, building up a seq of comm-param matrices, one for each object by index.
-  (let [obj-comm-params (map (comp (partial select-obj-comms comms-params) hash-set)
-                             (range (mx/row-count objs-feats)))
+  (let [num-objs (mx/row-count objs-feats)
+        obj-comm-params (map (comp (partial select-obj-comms comms-params) hash-set)
+                             (range num-objs))
+        ;; TODO: you were already estimating all object memberships?!
         result (new-sparse-row-matrix (pmap estimate-memb (mx/rows objs-feats) obj-comm-params))]
     result))
 
@@ -227,7 +229,13 @@
    objs-feats :- Mat
    comms-props :- Mat
    comm-idx :- sc/Int]
-  (let [seed-objs (mx/get-row groups-objs comm-idx) ; objs part of the selected community seed subgraph
+  (let [;;seed-objs (mx/get-row groups-objs comm-idx) ; objs part of the selected community seed subgraph
+        num-objs (mx/column-count groups-objs)
+        seed-objs (let [objs (mx/get-column objs-membs comm-idx)
+                        objs-bin (create-sparse-indexed-vector num-objs)]
+                    (doseq [nzi (mx/non-zero-indices objs)]
+                      (mx/mset! objs-bin nzi 1))
+                    objs-bin)
 
         ;; comms which objs from selected comm may be part of
         subset-comm-props (selected-rows comms-props
@@ -281,6 +289,7 @@
                                          (range (mx/row-count comms-props))))))
 
 ;; TODO: why did I name this with alt- prefix, should this and estimate-comm-props be merged???
+;; It's everything but the selected?  alt -> alternative?
 (sm/defn alt-mixed-prop :- ProbVec
   "Create a mixture distribution given a set of objects, their membership weights,
   and community feature distributions."
@@ -323,7 +332,7 @@
                     :change-count sc/Int
                     :changed-ids #{sc/Int}}
   "Calculate new community topic distribution parameters.
-  The select-objs fn can be used to specify which objects should
+  The groups-objs matrix can be used to specify which objects should
   represent a specific community. E.g., a clique vs. all objects
   with non-zero membership probabilty."
   [groups-objs :- BinMat
@@ -407,7 +416,12 @@
               {changed :changed
                change-count :change-count
                changed-ids :changed-ids
-               new-props :comms-props} (m-step groups-objs objs-groups membs objs-feat-vals props)]
+               new-props :comms-props} (m-step groups-objs objs-groups new-membs objs-feat-vals props)
+              ;; TODO: make sure to check for NOTE s too...
+              ;; NOTE: We were using past iteration membs before, but is that wrong?
+              ;;       Converges faster when using current iteration's membs
+              ;;(m-step groups-objs objs-groups membs objs-feat-vals props)
+              ]
           (if (not changed)
             (do (write-log "Community distributions have converged.")
                 {:objs-membs membs
@@ -450,7 +464,9 @@
           seed-objs-idx (->> (mx/non-zero-indices groups-objs)
                              (mapcat identity)
                              (distinct))
-          initial-objs-membs (estimate-membs objs-feat-vals objs-groups initial-comms-props seed-objs-idx)
+          ;;initial-objs-membs (estimate-membs objs-feat-vals objs-groups initial-comms-props seed-objs-idx)
+          num-objs (mx/column-count groups-objs)
+          initial-objs-membs (estimate-membs objs-feat-vals objs-groups initial-comms-props (range num-objs))
           _ (write-log "Initial object memberships found.")
           {est-comms-props :comms-props
            est-objs-membs :objs-membs} (run
