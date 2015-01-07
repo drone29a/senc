@@ -38,6 +38,9 @@
   [msg]
   (println (format "%s - %s" (str (java.util.Date.)) msg)))
 
+;; TODO: These matrix creation funcs were moved to munge, use them instead until
+;;       replacements are in core.matrix.
+
 (sm/defn new-sparse-row-matrix :- Mat
   [sparse-vecs :- [Vec]]
   (SparseRowMatrix/create ^"[Lmikera.vectorz.AVector;" (into-array mikera.vectorz.AVector sparse-vecs)))
@@ -417,8 +420,8 @@
                change-count :change-count
                changed-ids :changed-ids
                new-props :comms-props} (m-step groups-objs objs-groups new-membs objs-feat-vals props)
-              ;; TODO: make sure to check for NOTE s too...
-              ;; NOTE: We were using past iteration membs before, but is that wrong?
+              ;; TODO: make sure to check for NOTEs too...
+              ;; TODO: We were using past iteration membs before, but is that wrong?
               ;;       Converges faster when using current iteration's membs
               ;;(m-step groups-objs objs-groups membs objs-feat-vals props)
               ]
@@ -454,31 +457,33 @@
           max-iter (:max-iter opts)
           out-dir (:out-dir opts)
           objs-feat-vals (load-matrix (format "%s/objs-feat-vals.mm" input-path))
-          objs-groups (load-matrix (format "%s/objs-groups.mm" input-path))
-          groups-objs (load-matrix (format "%s/groups-objs.mm" input-path))
+          ;; upper-bound, objs x comms
+          candidate-comms (load-matrix (format "%s/upper-bound-objs-groups.mm" input-path))
+          ;; lower-bound, comms x objs
+          lower-bound-membs (load-matrix (format "%s/lower-bound-groups-objs.mm" input-path))
           _ (write-log "Loaded input.")
-          initial-comms-props (->> (estimate-props objs-feat-vals groups-objs)
+          initial-comms-props (->> (estimate-props objs-feat-vals lower-bound-membs)
                                    (round-to-zero! 1e-4))
           _ (write-log "Initial community proportions found.")
           ;; All the objects in at least one seed group
-          seed-objs-idx (->> (mx/non-zero-indices groups-objs)
+          seed-objs-idx (->> (mx/non-zero-indices lower-bound-membs)
                              (mapcat identity)
                              (distinct))
-          ;;initial-objs-membs (estimate-membs objs-feat-vals objs-groups initial-comms-props seed-objs-idx)
-          num-objs (mx/column-count groups-objs)
-          initial-objs-membs (estimate-membs objs-feat-vals objs-groups initial-comms-props (range num-objs))
+          ;;initial-objs-membs (estimate-membs objs-feat-vals candidate-comms initial-comms-props seed-objs-idx)
+          num-objs (mx/column-count lower-bound-membs)
+          initial-objs-membs (estimate-membs objs-feat-vals candidate-comms initial-comms-props (range num-objs))
           _ (write-log "Initial object memberships found.")
           {est-comms-props :comms-props
            est-objs-membs :objs-membs} (run
                                          objs-feat-vals
-                                         groups-objs
-                                         objs-groups
+                                         lower-bound-membs
+                                         candidate-comms
                                          initial-objs-membs
                                          initial-comms-props
                                          max-iter)
           _ (write-log "Estimating all objects membership...")
           num-objs (mx/row-count objs-feat-vals)
-          all-est-objs-membs (estimate-membs objs-feat-vals objs-groups est-comms-props (range num-objs))]
+          all-est-objs-membs (estimate-membs objs-feat-vals candidate-comms est-comms-props (range num-objs))]
       
       (write-log "Saving output...")
       (save-matrix est-comms-props (format "%s/mle-comms-props.mm" out-dir))
