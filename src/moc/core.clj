@@ -1,29 +1,44 @@
 (ns moc.core
   (:require [clojure.core.matrix :as mx]
-            [schema.core :as sc]
+            [schema.core :as s]
             [schema.macros :as sm]
             [moc.estimate.mle :as mle]
             [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.core.matrix.impl.pprint :as mpp :refer [pm]]
-            [notion.metric :refer [kl-cat]]
             [clojure.pprint :refer [pprint]]
-            [munge.core])
+            [munge.core]
+            [com.climate.claypoole :as cp])
   (:use [clojure.tools.cli :only [cli]]
         [moc.community :only [community obj]]
         [munge.io.matrix-mm :only [load-matrix save-matrix]]
         [munge.io.data-frame :only [save-data-frame]]
         [munge.io.core :only [load-ids]]
+        [munge.matrix :only [proportional select-rows selected-rows
+                             binary-vector b-or vec-non-zeros
+                             create-sparse-indexed-vector
+                             sparse-indexed-vector
+                             sparse-row-matrix
+                             sparse-column-matrix]]
         [moc.schema :only [Vec Mat ProbVec BinVec BinMat]]
-        [moc.util :only [proportional select-rows selected-rows
-                         binary-vector b-or safe-log log-multicat]])
+        [moc.util :only [safe-log log-multicat]])
   (:import [mikera.matrixx.impl SparseRowMatrix SparseColumnMatrix]
            [mikera.vectorz.impl SparseIndexedVector SparseHashedVector ZeroVector]
+           [mikera.vectorz Vectorz]
            [mikera.vectorz.util DoubleArrays])
   (:gen-class))
 
 (set! *warn-on-reflection* true)
 (mx/set-current-implementation :vectorz)
+
+(s/defn get-private-field :- s/Any
+  [x :- s/Any
+   field :- s/Str]
+  (let [^java.lang.reflect.Field f (-> x
+                                       (.getClass)
+                                       (.getDeclaredField field))]
+    (.setAccessible f true)
+    (.get f x)))
 
 (defn print-matrix-info
   [msg m]
@@ -38,83 +53,58 @@
   [msg]
   (println (format "%s - %s" (str (java.util.Date.)) msg)))
 
-;; TODO: These matrix creation funcs were moved to munge, use them instead until
-;;       replacements are in core.matrix.
-
-(sm/defn new-sparse-row-matrix :- Mat
-  [sparse-vecs :- [Vec]]
-  (SparseRowMatrix/create ^"[Lmikera.vectorz.AVector;" (into-array mikera.vectorz.AVector sparse-vecs)))
-
-(sm/defn new-sparse-column-matrix :- Mat
-  [sparse-vecs :- [Vec]]
-  (SparseColumnMatrix/create ^"[Lmikera.vectorz.AVector;" (into-array mikera.vectorz.AVector sparse-vecs)))
-
-(sm/defn new-sparse-indexed-vector :- Vec
-  [v :- [sc/Num]]
-  (let [data (double-array v)
-        n (count data)
-        nz-inds (DoubleArrays/nonZeroIndices data 0 n)
-        nnz (count nz-inds)
-        nz-data (double-array nnz)]
-    (dotimes [i nnz]
-      (aset nz-data i (aget data (aget nz-inds i))))
-    (SparseIndexedVector/wrap n nz-inds nz-data)))
-
-(sm/defn create-sparse-indexed-vector :- Vec
-  [length :- sc/Int]
-  (SparseIndexedVector/createLength length))
-
-(sm/defn new-sparse-matrix :- Mat
-  [rows :- [[sc/Num]]]
-  (new-sparse-row-matrix (map new-sparse-indexed-vector rows)))
-
-(sm/defn round-to-zero! :- Mat
+(s/defn round-to-zero! :- (s/either Mat Vec)
   "Returns a new matrix (need to recompute sparse index) with 
   values below threshold set to 0."
-  [threshold :- sc/Num
-   m :- (sc/either Mat Vec)]
+  [threshold :- s/Num
+   m :- (s/either Mat Vec)]
   ;; TODO: best speed assumes row matrix, fixable through current core.matrix API?
-  (let [vs (if (mx/vec? m) [m] (mx/rows m))]
-    (SparseRowMatrix/create ^java.util.List (map (fn [v] (when (instance? SparseIndexedVector v)
-                                                           (-> (.roundToZero ^SparseIndexedVector v threshold)
-                                                               (proportional))))
-                                                 vs))))
+  (if (mx/vec? m)
+    (.roundToZero ^SparseIndexedVector m threshold)
+    (let [vs (if (mx/vec? m) [m] (mx/rows m))]
+      (SparseRowMatrix/create ^java.util.List (map (fn [v] (when (instance? SparseIndexedVector v)
+                                                             (-> (.roundToZero ^SparseIndexedVector v threshold)
+                                                                 (proportional))))
+                                                   vs)))))
 
-(sm/defn restricted-objs :- Mat
+(s/defn restricted-objs :- Mat
   "A convenience function for restricting object feature matrix to
   those objects belonging to the community's seed subgraph."
   [seed-groups-objs :- BinMat
    objs-feats :- Mat
-   comm-idx :- sc/Int]
+   comm-idx :- s/Int]
   (->> (mx/get-row seed-groups-objs comm-idx)
        (selected-rows objs-feats)))
 
-(sm/defn restricted-comms :- Mat
+(s/defn restricted-comms :- Mat
   "A convenience function for restricting the community params
   matrix according to those communities influential to a set of objects."
   [objs-comms :- BinMat
    comms-props :- Mat
-   obj-idxs :- #{sc/Int}]
+   obj-idxs :- #{s/Int}]
   (let [row-indicator (apply b-or (select-rows objs-comms (vec obj-idxs)))]
     (selected-rows comms-props row-indicator)))
 
-(sm/defn estimate-props :- Mat
+(s/defn estimate-props :- Mat
   "Used to calculate the initial estimates for community feature proportions."
   [objs-feat-vals :- Mat
    groups-objs :- BinMat]
   ;; Was using this instead of doseq:
   (let [ncols (mx/column-count objs-feat-vals)
-        result (new-sparse-row-matrix (pmap (fn [group-objs]
-                                              (let [accum (SparseIndexedVector/createLength ncols)]
-                                                (doseq [row (mx/rows (selected-rows objs-feat-vals group-objs))]
-                                                  (when-not (instance? ZeroVector row)
-                                                    (mx/add! accum row)))
-                                                (-> accum proportional)))
-                                            (mx/rows groups-objs)))]
+        result (sparse-row-matrix (->> (pmap
+                                        (fn [group-objs]
+                                          (let [accum (SparseIndexedVector/createLength ncols)]
+                                            (doseq [row (mx/rows (selected-rows objs-feat-vals group-objs))]
+                                              (when-not (mx/zero-matrix? row)
+                                                (mx/add! accum row)))
+                                            (-> accum proportional)))
+                                        (mx/rows groups-objs))
+                                       (into [])))]
     result))
 
 ;; TODO: pass in a column-matrix version of comm-sparams for speed up?
-(sm/defn estimate-memb :- Vec
+;; TODO: round-to-zero! call at end to help performance in later ops that use this output?
+(s/defn estimate-memb :- Vec
   "Note: use a filtered comm-params matrix if you want to force zero membership 
   in some communities."
   [obj-feats :- Vec
@@ -124,7 +114,7 @@
   ;; TODO: we don't need all columns, how can we only do calculations with non-zero columns?
   
   (let [v (SparseIndexedVector/createLength (mx/row-count comms-params))
-        ;;weight (sm/fn )
+        ;;weight (s/fn )
         
 
         ;; Was using this for testing the chubby cons
@@ -135,31 +125,36 @@
         ;;             (new-sparse-column-matrix))
         ]
     (->> (mx/columns comms-params)
+         (map mx/mutable)
          (map proportional)
-         (map (sm/fn [term-count :- sc/Num
-                      weight-col :- Vec]
+         (map (sm/fn [term-count :- s/Num
+                      weight-col :- Vec]                 
                 (mx/emul! weight-col term-count)
                 weight-col)
               obj-feats)
          ;; TODO: can remove vec? removing vec makes it really slooow. coll -> array faster than seq -> array?
          (vec)
-         (new-sparse-column-matrix)
+         (sparse-column-matrix)
+         ;; TODO: rows from column matrix, expensive!!!
          (mx/rows)
+         (map mx/mutable)
          ;; TODO: is there a map we can use that will generate a sparse vector?
          (map mx/esum)
          ;; TODO: can remove vec?
          (vec)
-         (new-sparse-indexed-vector)
+         (sparse-indexed-vector)
          (proportional))))
 
 ;; TODO: convert into a function that can be used for computing single object memberships?
-(sm/defn estimate-membs :- Mat
+(s/defn estimate-membs :- Mat
   "Estimate the membership of a group of objects, specified by index. Used to limit estimation
   to only those objects belonging to seed groups."
   [objs-feat-vals :- Mat
    objs-groups :- BinMat
    comms-props :- Mat
-   obj-idxs :- [sc/Int]]
+   obj-idxs :- [s/Int]]
+  ;; TODO: can we convert comms-props to columns here to avoid
+  ;;       conversion in every call to estimate-memb?
   (let [num-objs (mx/row-count objs-feat-vals)
         num-comms (mx/row-count comms-props)
         membs (SparseRowMatrix/create num-objs num-comms)]
@@ -190,11 +185,11 @@
 
 ;; TODO: Use the BinMat objs-groups and selected-rows instead of a select-obj-comms fn
 ;; or make m-step use a similar function. Check which is cleaner.
-(sm/defn e-step :- Mat
+(s/defn e-step :- Mat
   "Calculate new object membership probabilities.
   The select-comms fn is used to select the communities
   of which an object is a member."
-  [select-obj-comms :- (sm/=> Mat Mat #{sc/Int}) ; This is restricted-comms with obj-comms partially applied
+  [select-obj-comms :- (s/=> Mat Mat #{s/Int}) ; This is restricted-comms with obj-comms partially applied
    objs-feats :- Mat
    comms-params :- Mat]
   ;; TODO: Make cleaner? This is a little goofy, building up a seq of comm-param matrices, one for each object by index.
@@ -202,18 +197,18 @@
         obj-comm-params (map (comp (partial select-obj-comms comms-params) hash-set)
                              (range num-objs))
         ;; TODO: you were already estimating all object memberships?!
-        result (new-sparse-row-matrix (pmap estimate-memb (mx/rows objs-feats) obj-comm-params))]
+        result (sparse-row-matrix (pmap estimate-memb (mx/rows objs-feats) obj-comm-params))]
     result))
 
 ;; phi
-(sm/defn subgraph-membership :- ProbVec
+(s/defn subgraph-membership :- ProbVec
   "Calculate the community membership weights for the group of objects making up the subgraph."
   [objs-membs :- Mat
    obj-prop-num-obs :- ProbVec]
   (mx/mmul obj-prop-num-obs objs-membs))
 
 ;; Theta_c!=i
-(sm/defn mixed-props :- Vec
+(s/defn mixed-props :- Vec
   "The subgraph-memb is almost a ProbVec but the element corresponding the community being estimated
   will be zero.
 
@@ -225,13 +220,13 @@
   (mx/mmul subgraph-memb
            subset-comm-props))
 
-(sm/defn estimate-comm-props :- ProbVec
+(s/defn estimate-comm-props :- ProbVec
   [groups-objs :- BinMat
    objs-groups :- BinMat
    objs-membs :- Mat
    objs-feats :- Mat
    comms-props :- Mat
-   comm-idx :- sc/Int]
+   comm-idx :- s/Int]
   (let [;;seed-objs (mx/get-row groups-objs comm-idx) ; objs part of the selected community seed subgraph
         num-objs (mx/column-count groups-objs)
         seed-objs (let [objs (mx/get-column objs-membs comm-idx)
@@ -241,6 +236,7 @@
                     objs-bin)
 
         ;; comms which objs from selected comm may be part of
+        ;; TODO: We're only ussing ssed objects here?! nom it's just named confusingly...
         subset-comm-props (selected-rows comms-props
                                          (apply b-or (selected-rows objs-groups seed-objs)))
 
@@ -250,8 +246,11 @@
                                 (selected-rows objs-feats seed-objs))
 
         ;; contribution proportion based on number of features per-object
-        obj-prop-num-obs (proportional (reduce mx/add! (SparseIndexedVector/createLength (mx/row-count objs-feats))
-                                               (mx/columns (selected-rows objs-feats seed-objs))))
+        ;; TODO: rows and columns conversion here
+        obj-prop-num-obs (->> (selected-rows objs-feats seed-objs)
+                              mx/columns
+                              (reduce mx/add! (SparseIndexedVector/createLength (mx/row-count objs-feats)))
+                              proportional)
 
         ;; TODO: shouldn't comm-mix-weight match what's calculated below in subgraph-membership call? (IT DOES!)
         ;; The issue is when we zero out the phi element for the selected community then phi is no longer normalized
@@ -262,7 +261,14 @@
         ;; the other is everything else collapsed into one.
         
         ;; the "averaged" phi for the selected community's seed subgraph, this is the complete phi vector
-        subgraph-memb (subgraph-membership (selected-rows objs-membs seed-objs) obj-prop-num-obs)
+        ;; TODO: should we use round-to-zero to reduce the number of computations performed in mixed-props?
+        ;;subgraph-memb (subgraph-membership (selected-rows objs-membs seed-objs) obj-prop-num-obs)
+        subgraph-memb (->> (subgraph-membership (selected-rows objs-membs seed-objs) obj-prop-num-obs)
+                           (round-to-zero! 1e-2)
+                           proportional)
+        ;; _ (println (format "comm-idx: %s, reduced 1e-2 nnz: %s" comm-idx (mx/non-zero-count (round-to-zero! 1e-2 (mx/clone subgraph-memb)))))
+        ;; _ (println (format "comm-idx: %s, reduced 1e-3 nnz: %s" comm-idx (mx/non-zero-count (round-to-zero! 1e-3 (mx/clone subgraph-memb)))))
+        ;; _ (println (format "comm-idx: %s, orig nnz: %s" comm-idx (mx/non-zero-count subgraph-memb)))
 
         ;; TODO: is it correct to mix communities according to per-object membership
         ;; but weighting is based on total number of object features?
@@ -281,19 +287,52 @@
                              other-props
                              (mx/mget subgraph-memb comm-idx))))
 
-(sm/defn score-params :- Vec
+;; TODO: can we limit the number of vector ops by rounding some community prop values to zero?
+;;       appears we would _not_ want to do this for object features, since those are tf-idf and possibly
+;;       not as easy to determine if rounding to zero is not harmful to esimation.
+(s/defn score-params :- Vec
   [groups-objs :- BinMat
    objs-feats :- Mat
    comms-props :- Mat]
-  (new-sparse-indexed-vector (pmap log-multicat
-                                   (mx/rows comms-props)
-                                   (pmap (comp (partial reduce mx/add)
-                                               (partial restricted-objs groups-objs objs-feats))
-                                         (range (mx/row-count comms-props))))))
+
+  ;; (pmap (comp (partial reduce mx/add! (SparseIndexedVector/createLength (mx/column-count objs-feats)))
+  ;;                                              ;;(fn [x] (println (mx/shape x)) x)
+  ;;                                              (partial restricted-objs groups-objs objs-feats))
+  ;;                                        (range (mx/row-count comms-props)))
+
+  ;; (pmap (comp (partial reduce mx/add! (Vectorz/wrap (double-array (mx/column-count objs-feats) 0.0)))
+  ;;                                              ;;(fn [x] (println (mx/shape x)) x)
+  ;;                                              (partial restricted-objs groups-objs objs-feats))
+  ;;                                        (range (mx/row-count comms-props)))
+  (let [num-feats (mx/column-count objs-feats)]
+    (sparse-indexed-vector (pmap log-multicat
+                                 (mx/rows comms-props)
+                                 ;; TODO: Make the map over rows in reduce mx/add! explicit
+                                 (pmap (comp (partial (fn [restrict-objs-feats]
+                                                        (try 
+                                                          (reduce
+                                                           (fn [sum x]
+                                                             (mx/add! sum x))
+                                                           (create-sparse-indexed-vector num-feats)
+                                                           restrict-objs-feats)
+                                                          (catch ArrayIndexOutOfBoundsException e
+                                                            (let [out-file (->> (System/getProperty "user.dir")
+                                                                                (java.io.File/createTempFile "oob-" ".clj"))]
+                                                              (write-log (format "Logged data related to OOB exception at: %s." (.getAbsolutePath out-file)))
+                                                              (spit out-file (for [^SparseIndexedVector row (.getRows restrict-objs-feats)
+                                                                                   :let [index (get-private-field row "index")
+                                                                                         data (get-private-field row "data")]]
+                                                                               {:index (-> index .data seq)
+                                                                                :data (-> data seq)})))  
+                                                            (.printStackTrace e System/out)
+                                                            (.flush System/out)))))
+                                             ;;(fn [x] (println (mx/shape x)) x)
+                                             (partial restricted-objs groups-objs objs-feats))
+                                       (range (mx/row-count comms-props)))))))
 
 ;; TODO: why did I name this with alt- prefix, should this and estimate-comm-props be merged???
 ;; It's everything but the selected?  alt -> alternative?
-(sm/defn alt-mixed-prop :- ProbVec
+(s/defn alt-mixed-prop :- ProbVec
   "Create a mixture distribution given a set of objects, their membership weights,
   and community feature distributions."
   [groups-objs :- BinMat
@@ -301,23 +340,25 @@
    objs-feats :- Mat
    objs-membs :- Mat
    comms-props :- Mat
-   comm-idx :- sc/Int]
+   comm-idx :- s/Int]
   (let [seed-objs (mx/get-row groups-objs comm-idx) ; objs part of the selected community seed subgraph
         subset-comms-props (selected-rows comms-props
                                           (apply b-or (selected-rows objs-groups seed-objs)))
-        ;; TODO: loop or doseq faster?
+        ;; TODO: use dense vectors here? add! is slow...
         seed-objs-feats (reduce mx/add!
                                 (SparseIndexedVector/createLength (mx/column-count objs-feats))
-                                (selected-rows objs-feats seed-objs))
+                                (mx/rows (selected-rows objs-feats seed-objs)))
         
-        ;; contribution proportion based on number of features per-object
+        ;; contribution proportion based on number of features per-object, N x 1
         obj-prop-num-obs (proportional (reduce mx/add!
                                                (SparseIndexedVector/createLength (mx/row-count objs-feats))
                                                (mx/columns (selected-rows objs-feats
                                                                           seed-objs))))
         ;; the complete phi vector
-        subgraph-memb (subgraph-membership (selected-rows objs-membs seed-objs)
-                                           obj-prop-num-obs)]
+        subgraph-memb (->> (subgraph-membership (selected-rows objs-membs seed-objs)
+                                                obj-prop-num-obs)
+                           (round-to-zero! 1e-2)
+                           proportional)]
 
     (comment (when (= comm-idx 0)
                (println "alt-mixed-prop")
@@ -330,10 +371,10 @@
     ;; These are SparseIndexedVector and SparseRowMatrix
     (mx/mmul subgraph-memb subset-comms-props)))
 
-(sm/defn m-step :- {:comms-props Mat
-                    :changed sc/Bool
-                    :change-count sc/Int
-                    :changed-ids #{sc/Int}}
+(s/defn m-step :- {:comms-props Mat
+                    :changed s/Bool
+                    :change-count s/Int
+                    :changed-ids #{s/Int}}
   "Calculate new community topic distribution parameters.
   The groups-objs matrix can be used to specify which objects should
   represent a specific community. E.g., a clique vs. all objects
@@ -345,48 +386,50 @@
    comms-props :- Mat]
   ;; Keep only the improvements. Is this nonsensical?
   ;; We want to score using all objects since we estimated comms with only seed group objects.
-  (let [scorer (partial score-params (new-sparse-row-matrix (mx/columns objs-groups-possible)) objs-feats)
+  ;; TODO: another conversion from rows to columns
+  ;; TODO: making rows from columns, would this cause shape errors?
+  (let [scorer (partial score-params (sparse-row-matrix (mx/columns objs-groups-possible)) objs-feats)
         num-comms (mx/row-count comms-props)
-        new-props (->> (new-sparse-row-matrix (pmap (partial estimate-comm-props
-                                                             groups-objs
-                                                             objs-groups-possible
-                                                             objs-membs
-                                                             objs-feats
-                                                             comms-props)
-                                                    (range num-comms)))
+        new-props (->> (sparse-row-matrix (pmap (partial estimate-comm-props
+                                                         groups-objs
+                                                         objs-groups-possible
+                                                         objs-membs
+                                                         objs-feats
+                                                         comms-props)
+                                                (range num-comms)))
                        (round-to-zero! 1e-4))
-        old-mixed-props (new-sparse-row-matrix (pmap (partial alt-mixed-prop
-                                                              groups-objs
-                                                              objs-groups-possible
-                                                              objs-feats
-                                                              objs-membs
-                                                              comms-props)
-                                                     (range num-comms)))
-        new-mixed-props (new-sparse-row-matrix (pmap (partial alt-mixed-prop
-                                                              groups-objs
-                                                              objs-groups-possible
-                                                              objs-feats
-                                                              objs-membs
-                                                              new-props)
+        old-mixed-props (sparse-row-matrix (pmap (partial alt-mixed-prop
+                                                          groups-objs
+                                                          objs-groups-possible
+                                                          objs-feats
+                                                          objs-membs
+                                                          comms-props)
+                                                 (range num-comms)))
+        new-mixed-props (sparse-row-matrix (pmap (partial alt-mixed-prop
+                                                          groups-objs
+                                                          objs-groups-possible
+                                                          objs-feats
+                                                          objs-membs
+                                                          new-props)
                                                      (range num-comms)))
         changed (atom false)
         change-count (atom 0)
         changed-ids (atom #{})]
-    {:comms-props (new-sparse-row-matrix (pmap (fn [[old-score old-v] [new-score new-v] comm-idx]
-                                                 (if (>= old-score new-score)
-                                                   old-v
-                                                   (do (swap! changed not)
-                                                       (swap! change-count inc)
-                                                       (swap! changed-ids conj comm-idx)
-                                                       new-v)))
-                                               (map vector (scorer old-mixed-props) comms-props)
-                                               (map vector (scorer new-mixed-props) new-props)
-                                               (range num-comms)))
+    {:comms-props (sparse-row-matrix (pmap (fn [[old-score old-v] [new-score new-v] comm-idx]
+                                             (if (>= old-score new-score)
+                                               old-v
+                                               (do (swap! changed not)
+                                                   (swap! change-count inc)
+                                                   (swap! changed-ids conj comm-idx)
+                                                   new-v)))
+                                           (map vector (scorer old-mixed-props) comms-props)
+                                           (map vector (scorer new-mixed-props) new-props)
+                                           (range num-comms)))
      :changed @changed
      :change-count @change-count
      :changed-ids @changed-ids}))
 
-(sm/defn run
+(s/defn run
   "Run the algorithm. Main calls this, so can you.
   Arguments:
   objs-feat-vals - observed feature values
@@ -400,7 +443,7 @@
    objs-groups :- BinMat
    objs-membs :- Mat
    comms-props :- Mat
-   max-iter :- sc/Int]
+   max-iter :- s/Int]
   (let [num-comms (mx/row-count comms-props)]
     (loop [membs objs-membs
            props comms-props
@@ -415,7 +458,8 @@
         (do (write-log "Maximum number of iterations reached.")
             {:objs-membs membs
              :comms-props props})
-        (let [new-membs (e-step (partial restricted-comms objs-groups) objs-feat-vals props)
+        (let [;;new-membs membs 
+              new-membs (e-step (partial restricted-comms objs-groups) objs-feat-vals props)
               {changed :changed
                change-count :change-count
                changed-ids :changed-ids
@@ -492,7 +536,7 @@
 
 (comment
 
-  (def result (sm/with-fn-validation
+  (def result (s/with-fn-validation
                 (run (partial score
                               (:true-props data))
                   (:obj-feats data)

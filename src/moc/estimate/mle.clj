@@ -3,7 +3,7 @@
             [schema.core :as sc]
             [schema.macros :as sm])
   (:use [moc.schema :only [Vec Mat ProbVec]]
-        [moc.util :only [proportional select-rows]]))
+        [munge.matrix :only [proportional select-rows]]))
 
 (sm/defn solve-linear :- sc/Num
   "Solve a simple linear equation of the form y = ax + b."

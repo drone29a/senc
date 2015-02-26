@@ -1,7 +1,7 @@
 (ns moc.core-test
   (:require [clojure.test :refer :all]
             [moc.core :refer :all]
-            [moc.util :refer [proportional selected-rows]]
+            [munge.matrix :refer [selected-rows sparse-indexed-vector sparse-matrix]]
             [clojure.core.matrix :as mx]
             [schema.test]
             [clojure.core.matrix.impl.pprint :as mpp :refer [pm]]))
@@ -21,36 +21,36 @@
   (testing "object is member of only one group"
     (is (close-seq? 1e-3
                     [1.0 0.0]
-                    (estimate-memb (new-sparse-indexed-vector [10 0 0])
-                                   (selected-rows (new-sparse-matrix [[0.4 0.4 0.2]
+                    (estimate-memb (sparse-indexed-vector [10 0 0])
+                                   (selected-rows (sparse-matrix 2 3 [[0.4 0.4 0.2]
                                                                       [0.1 0.8 0.1]])
-                                                  (new-sparse-indexed-vector [1 0]))))))
+                                                  (sparse-indexed-vector [1 0]))))))
   (testing "basic membership"
     (is (close-seq? 1e-4
                     [0.3333 0.6666]
-                    (estimate-memb (new-sparse-indexed-vector [10 0 20 0 30])
-                                   (new-sparse-matrix [[0.6 0.3 0.1 0 0]
-                                                       [0 0 0.1 0.3 0.6]]))))
+                    (estimate-memb (sparse-indexed-vector [10 0 20 0 30])
+                                   (sparse-matrix 2 4[[0.6 0.3 0.1 0 0]
+                                                      [0 0 0.1 0.3 0.6]]))))
     (is (close-seq? 1e-4
                     [0 0.477 0.523 0 0]
-                    (estimate-memb (new-sparse-indexed-vector [51 0 20 8 21])
-                                   (selected-rows (new-sparse-matrix [[0.7 0.2 0.1 0 0]
+                    (estimate-memb (sparse-indexed-vector [51 0 20 8 21])
+                                   (selected-rows (sparse-matrix 5 5 [[0.7 0.2 0.1 0 0]
                                                                       [0.7 0 0.3 0 0]
                                                                       [0.3 0 0.2 0.2 0.3]
                                                                       [0.4 0.5 0.1 0 0]
                                                                       [0.1 0.1 0.2 0.4 0.2]])
-                                                  (new-sparse-indexed-vector [0 1 1 0 0]))))))
+                                                  (sparse-indexed-vector [0 1 1 0 0]))))))
 
   (testing "disjoint features"
     (is (mx/equals [0.5 0.5]
-                   (estimate-memb (new-sparse-indexed-vector [10 5 10 5])
-                                  (new-sparse-matrix [[0.9 0.1 0 0]
-                                                         [0 0 0.9 0.1]]))))
+                   (estimate-memb (sparse-indexed-vector [10 5 10 5])
+                                  (sparse-matrix 2 3 [[0.9 0.1 0 0]
+                                                      [0 0 0.9 0.1]]))))
     (testing "feature count changes the mix"
       (is (mx/equals [0.75 0.25]
-                     (estimate-memb (new-sparse-indexed-vector [10 5 3 2])
-                                    (new-sparse-matrix [[0.9 0.1 0 0]
-                                                           [0 0 0.9 0.1]]))))))
+                     (estimate-memb (sparse-indexed-vector [10 5 3 2])
+                                    (sparse-matrix 2 3 [[0.9 0.1 0 0]
+                                                        [0 0 0.9 0.1]]))))))
  
   (testing "merging membership vectors"
     ;; TODO: test if estimating a group of objects directly results

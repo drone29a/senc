@@ -1,3 +1,5 @@
+;; TODO: Move to notion
+
 (ns moc.objective
   (:require [schema.core :as sc]
             [schema.macros :as sm]
