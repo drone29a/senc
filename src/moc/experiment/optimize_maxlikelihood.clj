@@ -66,7 +66,7 @@
    obj-mships :- Vec
    obj-feat :- Vec
    comm-idx :- Integer]
-  (mo/obj-fn (partial mo/f obj-mships obj-feat comm-props comm-idx) 
+  (mo/obj-fn (partial mo/f-neg-ll obj-mships obj-feat comm-props comm-idx) 
              (conj (mo/f-dels-prop obj-mships comm-props comm-idx obj-feat)
                    mo/f-del-l-mult)))
 

@@ -61,7 +61,7 @@
        (mx/columns comm-props)
        (mx/eseq obj-obs)))
 
-(sm/defn f :- Number
+(sm/defn f-neg-ll :- Number
   "Calculate the negative log-likelihood with Lagrange multiplier for a mixture of categoricals.
   Negative because we want to minimize."
   [obj-mships :- Vec

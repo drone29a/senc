@@ -14,7 +14,7 @@
   [x]
   (and (mx/vec? x)
        (> 0.001
-          (Math/abs (- 1 (mx/esum x))))))
+          (Math/abs (double (- 1 (mx/esum x)))))))
 (def ProbVec
   "Probabilty vector"
   (sc/pred prob-vec? 'prob-vec?))

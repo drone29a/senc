@@ -1,23 +1,21 @@
 (ns moc.community
-  (:require [schema.core]
-            [schema.macros :as sm])
-  (:gen-class))
+  (:require [schema.core :as s]))
 
-(sm/defrecord Obj
+(s/defrecord Obj
     [id :- Integer
      feat-counts :- [Double]])
 
-(sm/defn obj
+(s/defn obj
   [id :- Integer
    feat-counts :- [Double]]
   (Obj. id feat-counts))
 
-(sm/defrecord Community
+(s/defrecord Community
     [id :- Integer
      feat-props :- [Double]
      members :- [moc.community.Obj]])
 
-(sm/defn community :- Community
+(s/defn community :- Community
   [id :-  Integer
    feat-props :- [Double]
    members :- [moc.community.Obj]]

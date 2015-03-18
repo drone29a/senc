@@ -25,7 +25,8 @@
   (:import [mikera.matrixx.impl SparseRowMatrix SparseColumnMatrix]
            [mikera.vectorz.impl SparseIndexedVector SparseHashedVector ZeroVector]
            [mikera.vectorz Vectorz]
-           [mikera.vectorz.util DoubleArrays])
+           [mikera.vectorz.util DoubleArrays]
+           [mikera.indexz Index])
   (:gen-class))
 
 (set! *warn-on-reflection* true)
@@ -308,24 +309,24 @@
     (sparse-indexed-vector (pmap log-multicat
                                  (mx/rows comms-props)
                                  ;; TODO: Make the map over rows in reduce mx/add! explicit
-                                 (pmap (comp (partial (fn [restrict-objs-feats]
-                                                        (try 
-                                                          (reduce
-                                                           (fn [sum x]
-                                                             (mx/add! sum x))
-                                                           (create-sparse-indexed-vector num-feats)
-                                                           restrict-objs-feats)
-                                                          (catch ArrayIndexOutOfBoundsException e
-                                                            (let [out-file (->> (System/getProperty "user.dir")
-                                                                                (java.io.File/createTempFile "oob-" ".clj"))]
-                                                              (write-log (format "Logged data related to OOB exception at: %s." (.getAbsolutePath out-file)))
-                                                              (spit out-file (for [^SparseIndexedVector row (.getRows restrict-objs-feats)
-                                                                                   :let [index (get-private-field row "index")
-                                                                                         data (get-private-field row "data")]]
-                                                                               {:index (-> index .data seq)
-                                                                                :data (-> data seq)})))  
-                                                            (.printStackTrace e System/out)
-                                                            (.flush System/out)))))
+                                 (pmap (comp (fn [^SparseRowMatrix restrict-objs-feats]
+                                               (try 
+                                                 (reduce
+                                                  (fn [sum x]
+                                                    (mx/add! sum x))
+                                                  (create-sparse-indexed-vector num-feats)
+                                                  restrict-objs-feats)
+                                                 (catch ArrayIndexOutOfBoundsException e
+                                                   (let [out-file (->> (System/getProperty "user.dir")
+                                                                       (java.io.File/createTempFile "oob-" ".clj"))]
+                                                     (write-log (format "Logged data related to OOB exception at: %s." (.getAbsolutePath out-file)))
+                                                     (spit out-file (for [^SparseIndexedVector row (.getRows restrict-objs-feats)
+                                                                          :let [^Index index (get-private-field row "index")
+                                                                                ^doubles data (get-private-field row "data")]]
+                                                                      {:index (-> index .data seq)
+                                                                       :data (-> data seq)})))  
+                                                   (.printStackTrace e System/out)
+                                                   (.flush System/out))))
                                              ;;(fn [x] (println (mx/shape x)) x)
                                              (partial restricted-objs groups-objs objs-feats))
                                        (range (mx/row-count comms-props)))))))

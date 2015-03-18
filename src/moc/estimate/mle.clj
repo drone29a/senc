@@ -60,4 +60,5 @@
   [obj-feats :- Mat
    obj-memb :- Mat
    comm-props :- Mat
-   obj-idx :- sc/Int])
+   obj-idx :- sc/Int]
+  (assert false "Unimplemented."))

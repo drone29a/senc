@@ -56,12 +56,13 @@
 
 (def comm-props-mat (estimate-comms obj-feat-mat obj-memb-mat))
 
-(defn try-it []
-  (use '[moc.experiment.known-obj])
-  (require '[clojure.core.matrix :as mx])
-  (require '[schema.core :as sc])
-  (sc/with-fn-validation 
-    (.run m-h-a of-h-a (double-array (conj (into [] (mx/get-row comm-props-mat 0)) 10000)))))
+(comment
+  (defn try-it []
+    (use '[moc.experiment.known-obj])
+    (require '[clojure.core.matrix :as mx])
+    (require '[schema.core :as sc])
+    (sc/with-fn-validation 
+      (.run m-h-a of-h-a (double-array (conj (into [] (mx/get-row comm-props-mat 0)) 10000))))))
 
 ;;; scratch
 
