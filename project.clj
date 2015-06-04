@@ -8,8 +8,6 @@
                  [prismatic/schema "0.3.3"]
                  [notion "0.1.0-SNAPSHOT"]
                  [munge "0.1.0-SNAPSHOT"]
-                 ;; [net.mikera/core.matrix "0.32.2-SNAPSHOT"]
-                 ;; [net.mikera/vectorz-clj "0.28.1-SNAPSHOT"]
                  [net.mikera/core.matrix "0.33.3-SNAPSHOT"]
                  [net.mikera/vectorz-clj "0.29.1-SNAPSHOT"]
                  [com.climate/claypoole "0.4.0"]
