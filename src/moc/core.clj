@@ -114,37 +114,26 @@
 
   ;; TODO: we don't need all columns, how can we only do calculations with non-zero columns?
   
-  (let [v (SparseIndexedVector/createLength (mx/row-count comms-params))
-        ;;weight (s/fn )
-        
-
-        ;; Was using this for testing the chubby cons
-        ;; result (->> (mx/columns comms-params)
-                    
-        ;;             (print-matrix-info "after first prop")
-                    
-        ;;             (new-sparse-column-matrix))
-        ]
-    (->> (mx/columns comms-params)
-         (map mx/mutable)
-         (map proportional)
-         (map (sm/fn [term-count :- s/Num
-                      weight-col :- Vec]                 
-                (mx/emul! weight-col term-count)
-                weight-col)
-              obj-feats)
-         ;; TODO: can remove vec? removing vec makes it really slooow. coll -> array faster than seq -> array?
-         (vec)
-         (sparse-column-matrix)
-         ;; TODO: rows from column matrix, expensive!!!
-         (mx/rows)
-         (map mx/mutable)
-         ;; TODO: is there a map we can use that will generate a sparse vector?
-         (map mx/esum)
-         ;; TODO: can remove vec?
-         (vec)
-         (sparse-indexed-vector)
-         (proportional))))
+  (->> (mx/columns comms-params)
+       (map mx/mutable)
+       (map proportional)
+       (map (sm/fn [term-count :- s/Num
+                    weight-col :- Vec]                 
+              (mx/emul! weight-col term-count)
+              weight-col)
+            obj-feats)
+       ;; TODO: can remove vec? removing vec makes it really slooow. coll -> array faster than seq -> array?
+       (vec)
+       (sparse-column-matrix)
+       ;; TODO: rows from column matrix, expensive!!!
+       (mx/rows)
+       (map mx/mutable)
+       ;; TODO: is there a map we can use that will generate a sparse vector?
+       (map mx/esum)
+       ;; TODO: can remove vec?
+       (vec)
+       (sparse-indexed-vector)
+       (proportional)))
 
 ;; TODO: convert into a function that can be used for computing single object memberships?
 (s/defn estimate-membs :- Mat
@@ -265,7 +254,7 @@
         ;; TODO: should we use round-to-zero to reduce the number of computations performed in mixed-props?
         ;;subgraph-memb (subgraph-membership (selected-rows objs-membs seed-objs) obj-prop-num-obs)
         subgraph-memb (->> (subgraph-membership (selected-rows objs-membs seed-objs) obj-prop-num-obs)
-                           (round-to-zero! 1e-2)
+                           (round-to-zero! 1e-4)
                            proportional)
         ;; _ (println (format "comm-idx: %s, reduced 1e-2 nnz: %s" comm-idx (mx/non-zero-count (round-to-zero! 1e-2 (mx/clone subgraph-memb)))))
         ;; _ (println (format "comm-idx: %s, reduced 1e-3 nnz: %s" comm-idx (mx/non-zero-count (round-to-zero! 1e-3 (mx/clone subgraph-memb)))))
@@ -358,7 +347,7 @@
         ;; the complete phi vector
         subgraph-memb (->> (subgraph-membership (selected-rows objs-membs seed-objs)
                                                 obj-prop-num-obs)
-                           (round-to-zero! 1e-2)
+                           (round-to-zero! 1e-4)
                            proportional)]
 
     (comment (when (= comm-idx 0)
@@ -510,6 +499,10 @@
           initial-comms-props (->> (estimate-props objs-feat-vals lower-bound-membs)
                                    (round-to-zero! 1e-4))
           _ (write-log "Initial community proportions found.")
+          ;; _ (write-log (format "Found %s non-zero communities." (->> initial-comms-props
+          ;;                                                            mx/rows
+          ;;                                                            (map mx/non-zero-count)
+          ;;                                                            (filter (comp not zero?)) count)))
           ;; All the objects in at least one seed group
           seed-objs-idx (->> (mx/non-zero-indices lower-bound-membs)
                              (mapcat identity)
