@@ -9,8 +9,7 @@
                  [notion "0.1.0-SNAPSHOT"]
                  [munge "0.1.0-SNAPSHOT"]
                  [net.mikera/core.matrix "0.33.3-SNAPSHOT"]
-                 [net.mikera/vectorz-clj "0.29.1-SNAPSHOT"]
-                 [com.climate/claypoole "1.0.0"]]
+                 [net.mikera/vectorz-clj "0.29.1-SNAPSHOT"]]
   :main senc.core
   :profiles {:common {:jvm-opts ["-Xmx14g" "-server" "-XX:+UseConcMarkSweepGC" "-XX:+TieredCompilation"]}
              :prod [:common]}
