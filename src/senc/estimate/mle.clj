@@ -1,8 +1,8 @@
-(ns moc.estimate.mle
+(ns senc.estimate.mle
   (:require [clojure.core.matrix :as mx]
             [schema.core :as sc]
             [schema.macros :as sm])
-  (:use [moc.schema :only [Vec Mat ProbVec]]
+  (:use [munge.schema :only [Vec Mat ProbVec]]
         [munge.matrix :only [proportional select-rows]]))
 
 (sm/defn solve-linear :- sc/Num

@@ -1,6 +1,6 @@
-(ns moc.util-test
+(ns senc.util-test
   (:require [clojure.test :refer :all]
-            [moc.util :refer :all]
+            [senc.util :refer :all]
             [clojure.core.matrix :as mx]
             [schema.test]))
 

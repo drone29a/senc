@@ -1,8 +1,8 @@
-(ns moc.util
+(ns senc.util
   (:require [clojure.core.matrix :as mx]
             [schema.core :as s]
             [munge.matrix :as mmx])
-  (:use [moc.schema :only [Vec Mat ProbVec BinVec]])
+  (:use [munge.schema :only [Vec Mat ProbVec BinVec]])
   (:import [mikera.matrixx.impl SparseRowMatrix]))
 
 (set! *warn-on-reflection* true)

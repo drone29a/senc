@@ -1,9 +1,9 @@
-(ns moc.experiment.optimize-maxlikelihood
+(ns senc.experiment.optimize-maxlikelihood
   (:require [clojure.core.matrix :as mx]
             [schema.macros :as sm]
             [schema.core :as sc]
-            [moc.objective :as mo])
-  (:use [moc.schema :only [Vec Mat]])
+            [senc.objective :as mo])
+  (:use [munge.schema :only [Vec Mat]])
   (:import (lbfgsb DifferentiableFunction
                    Minimizer
                    Bound

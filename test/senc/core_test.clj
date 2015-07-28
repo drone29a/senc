@@ -1,6 +1,6 @@
-(ns moc.core-test
+(ns senc.core-test
   (:require [clojure.test :refer :all]
-            [moc.core :refer :all]
+            [senc.core :refer :all]
             [munge.matrix :refer [selected-rows sparse-indexed-vector sparse-matrix]]
             [clojure.core.matrix :as mx]
             [schema.test]

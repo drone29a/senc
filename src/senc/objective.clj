@@ -1,10 +1,10 @@
 ;; TODO: Move to notion
 
-(ns moc.objective
+(ns senc.objective
   (:require [schema.core :as sc]
             [schema.macros :as sm]
             [clojure.core.matrix :as mx])
-  (:use [moc.schema :only [Vec Mat]])
+  (:use [munge.schema :only [Vec Mat]])
   (:import (lbfgsb DifferentiableFunction 
                    FunctionValues)))
 

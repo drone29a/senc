@@ -1,4 +1,4 @@
-(ns moc.core
+(ns senc.core
   (:require [clojure.core.matrix :as mx]
             [schema.core :as s]
             [schema.macros :as sm]
@@ -7,8 +7,7 @@
             [clojure.set :as set]
             [clojure.core.matrix.impl.pprint :as mpp :refer [pm]]
             [clojure.pprint :refer [pprint]]
-            [munge.core]
-            [com.climate.claypoole :as cp])
+            [munge.core])
   (:use [clojure.tools.cli :only [cli]]
         [moc.community :only [community obj]]
         [munge.io.matrix-mm :only [load-matrix save-matrix]]

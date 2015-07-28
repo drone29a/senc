@@ -1,4 +1,4 @@
-(ns moc.schema
+(ns senc.schema
   (:require [clojure.core.matrix :as mx]
             [schema.core :as sc]))
 

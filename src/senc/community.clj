@@ -1,4 +1,4 @@
-(ns moc.community
+(ns senc.community
   (:require [schema.core :as s]))
 
 (s/defrecord Obj
