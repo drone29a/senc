@@ -1,15 +1,14 @@
 (ns senc.core
   (:require [clojure.core.matrix :as mx]
             [schema.core :as s]
-            [schema.macros :as sm]
-            [moc.estimate.mle :as mle]
+            [senc.estimate.mle :as mle]
             [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.core.matrix.impl.pprint :as mpp :refer [pm]]
             [clojure.pprint :refer [pprint]]
             [munge.core])
   (:use [clojure.tools.cli :only [cli]]
-        [moc.community :only [community obj]]
+        [senc.schema :only [Vec Mat ProbVec BinVec BinMat]]
         [munge.io.matrix-mm :only [load-matrix save-matrix]]
         [munge.io.data-frame :only [save-data-frame]]
         [munge.io.core :only [load-ids]]
@@ -19,8 +18,7 @@
                              sparse-indexed-vector
                              sparse-row-matrix
                              sparse-column-matrix]]
-        [moc.schema :only [Vec Mat ProbVec BinVec BinMat]]
-        [moc.util :only [safe-log log-multicat]])
+        [senc.util :only [safe-log log-multicat]])
   (:import [mikera.matrixx.impl SparseRowMatrix SparseColumnMatrix]
            [mikera.vectorz.impl SparseIndexedVector SparseHashedVector ZeroVector]
            [mikera.vectorz Vectorz]
@@ -116,7 +114,7 @@
   (->> (mx/columns comms-params)
        (map mx/mutable)
        (map proportional)
-       (map (sm/fn [term-count :- s/Num
+       (map (s/fn [term-count :- s/Num
                     weight-col :- Vec]                 
               (mx/emul! weight-col term-count)
               weight-col)

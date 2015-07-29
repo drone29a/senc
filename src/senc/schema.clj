@@ -1,14 +1,14 @@
 (ns senc.schema
   (:require [clojure.core.matrix :as mx]
-            [schema.core :as sc]))
+            [schema.core :as s]))
 
 (def Vec
   "Any vector"
-  (sc/pred mx/vec? 'vec?))
+  (s/pred mx/vec? 'vec?))
 
 (def Mat
   "Any matrix"
-  (sc/pred mx/matrix? 'matrix?))
+  (s/pred mx/matrix? 'matrix?))
 
 (defn prob-vec?
   [x]
@@ -17,7 +17,7 @@
           (Math/abs (double (- 1 (mx/esum x)))))))
 (def ProbVec
   "Probabilty vector"
-  (sc/pred prob-vec? 'prob-vec?))
+  (s/pred prob-vec? 'prob-vec?))
 
 (defn bin-vec?
   [x]
@@ -25,7 +25,7 @@
        (every? #(or (== 1 %) (== 0 %)) (mx/eseq x))))
 (def BinVec
   "Binary vector"
-  (sc/pred bin-vec? 'bin-vec?))
+  (s/pred bin-vec? 'bin-vec?))
 
 (defn bin-mat?
   [x]
@@ -33,4 +33,24 @@
        (every? #(or (== 1 %) (== 0 %)) (mx/eseq x))))
 (def BinMat
   "Binary matrix"
-  (sc/pred bin-mat? 'bin-mat?))
+  (s/pred bin-mat? 'bin-mat?))
+
+(s/defrecord Obj
+    [id :- Integer
+     feat-counts :- [Double]])
+
+(s/defn obj
+  [id :- Integer
+   feat-counts :- [Double]]
+  (Obj. id feat-counts))
+
+(s/defrecord Community
+    [id :- Integer
+     feat-props :- [Double]
+     members :- [senc.schema.Obj]])
+
+(s/defn community :- Community
+  [id :-  Integer
+   feat-props :- [Double]
+   members :- [senc.schema.Obj]]
+  (Community. id feat-props members))

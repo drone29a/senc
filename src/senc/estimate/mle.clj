@@ -1,18 +1,17 @@
 (ns senc.estimate.mle
   (:require [clojure.core.matrix :as mx]
-            [schema.core :as sc]
-            [schema.macros :as sm])
+            [schema.core :as s])
   (:use [munge.schema :only [Vec Mat ProbVec]]
         [munge.matrix :only [proportional select-rows]]))
 
-(sm/defn solve-linear :- sc/Num
+(s/defn solve-linear :- s/Num
   "Solve a simple linear equation of the form y = ax + b."
-  [y :- sc/Num
-   a :- sc/Num
-   b :- sc/Num]
+  [y :- s/Num
+   a :- s/Num
+   b :- s/Num]
   (/ (- y b) a))
 
-(sm/defn estimate-mixed-mult :- ProbVec
+(s/defn estimate-mixed-mult :- ProbVec
   "We are solving a series of linear equations, 
   one for each categorical dimension.
 
@@ -21,8 +20,8 @@
   provided."
   [obs :- Vec
    ;; TODO: when other-props isn't ProbVec is it all zeros? make a ZeroVec?
-   other-props :- (sc/either ProbVec Vec)
-   mix-weight :- sc/Num]
+   other-props :- (s/either ProbVec Vec)
+   mix-weight :- s/Num]
   ;; final proportional needed when there were negative values from subtracting the
   ;; proportion of observed feature values by the mixed other community parameters
   (->> (-> (proportional obs)
@@ -31,12 +30,12 @@
        (mx/emap! (partial max 0))
        (proportional)))
 
-(sm/defn estimate-comm :- Vec
-  [select-objs :- (sc/either (sm/=> [sc/Int] sc/Int) [[sc/Int]])
+(s/defn estimate-comm :- Vec
+  [select-objs :- (s/either (s/=> [s/Int] s/Int) [[s/Int]])
    obj-feats :- Mat
    obj-memb :- Mat
    comm-props :- Mat
-   comm-idx :- sc/Int]
+   comm-idx :- s/Int]
   (let [obj-idxs (select-objs comm-idx)
         comb-memb (proportional (reduce mx/add (select-rows obj-memb obj-idxs)))
         comb-feats (reduce mx/add (select-rows obj-feats obj-idxs))
@@ -44,10 +43,10 @@
         mix-weight (mx/mget comb-memb comm-idx)]
     (estimate-mixed-mult comb-feats other-props mix-weight)))
 
-(sm/defn estimate-mix-from-terms :- Vec
+(s/defn estimate-mix-from-terms :- Vec
   "Estimate the mixture of communities for an object."
   [obj-feats :- Mat
    obj-memb :- Mat
    comm-props :- Mat
-   obj-idx :- sc/Int]
+   obj-idx :- s/Int]
   (assert false "Unimplemented."))
