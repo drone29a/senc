@@ -185,7 +185,6 @@
   (let [num-objs (mx/row-count objs-feats)
         obj-comm-params (map (comp (partial select-obj-comms comms-params) hash-set)
                              (range num-objs))
-        ;; TODO: you were already estimating all object memberships?!
         result (sparse-row-matrix (pmap estimate-memb (mx/rows objs-feats) obj-comm-params))]
     result))
 
@@ -225,7 +224,6 @@
                     objs-bin)
 
         ;; comms which objs from selected comm may be part of
-        ;; TODO: We're only ussing ssed objects here?! nom it's just named confusingly...
         subset-comm-props (selected-rows comms-props
                                          (apply b-or (selected-rows objs-groups seed-objs)))
 
@@ -240,38 +238,13 @@
                               mx/columns
                               (reduce mx/add! (SparseIndexedVector/createLength (mx/row-count objs-feats)))
                               proportional)
-
-        ;; TODO: shouldn't comm-mix-weight match what's calculated below in subgraph-membership call? (IT DOES!)
-        ;; The issue is when we zero out the phi element for the selected community then phi is no longer normalized
-        ;; That's why we then have to normalize the result in other-mixed-props.
-        ;; Do we actually want it to be unnormalized? According to your equation I think so.
-        ;; Think about this though... Maybe it doesn't matter?
-        ;; Remember this is like mixing two distributions, one is the selected,
-        ;; the other is everything else collapsed into one.
-        
         ;; the "averaged" phi for the selected community's seed subgraph, this is the complete phi vector
         ;; TODO: should we use round-to-zero to reduce the number of computations performed in mixed-props?
         ;;subgraph-memb (subgraph-membership (selected-rows objs-membs seed-objs) obj-prop-num-obs)
         subgraph-memb (->> (subgraph-membership (selected-rows objs-membs seed-objs) obj-prop-num-obs)
                            (round-to-zero! 1e-4)
                            proportional)
-        ;; _ (println (format "comm-idx: %s, reduced 1e-2 nnz: %s" comm-idx (mx/non-zero-count (round-to-zero! 1e-2 (mx/clone subgraph-memb)))))
-        ;; _ (println (format "comm-idx: %s, reduced 1e-3 nnz: %s" comm-idx (mx/non-zero-count (round-to-zero! 1e-3 (mx/clone subgraph-memb)))))
-        ;; _ (println (format "comm-idx: %s, orig nnz: %s" comm-idx (mx/non-zero-count subgraph-memb)))
-
-        ;; TODO: is it correct to mix communities according to per-object membership
-        ;; but weighting is based on total number of object features?
         other-props (mixed-props (mx/mset subgraph-memb comm-idx 0) subset-comm-props)]
-
-    (comment (when (= comm-idx 0)
-               (println "estimate-comm-props")
-               (println (mx/esum other-props)) ; this was all 0s ; almost 0
-               (println (mx/esum subgraph-memb)) ; has some nonzeros ; sums to 0.69
-               (println (pm (mx/mget subgraph-memb comm-idx))) ; it is 0. what?!?? it is 0 again, what?!?!
-               (println (mx/esum (mx/get-column objs-membs comm-idx))) ; we need to lookup specific cells
-               (println (mx/esum obj-prop-num-obs)) ; has some nonzeros, need to compare cells
-               (println (seq (mx/non-zero-indices seed-objs)))))
-
     (mle/estimate-mixed-mult seed-objs-feats
                              other-props
                              (mx/mget subgraph-memb comm-idx))))
@@ -315,12 +288,10 @@
                                                                        :data (-> data seq)})))  
                                                    (.printStackTrace e System/out)
                                                    (.flush System/out))))
-                                             ;;(fn [x] (println (mx/shape x)) x)
                                              (partial restricted-objs groups-objs objs-feats))
                                        (range (mx/row-count comms-props)))))))
 
-;; TODO: why did I name this with alt- prefix, should this and estimate-comm-props be merged???
-;; It's everything but the selected?  alt -> alternative?
+
 (s/defn alt-mixed-prop :- ProbVec
   "Create a mixture distribution given a set of objects, their membership weights,
   and community feature distributions."
@@ -348,15 +319,6 @@
                                                 obj-prop-num-obs)
                            (round-to-zero! 1e-4)
                            proportional)]
-
-    (comment (when (= comm-idx 0)
-               (println "alt-mixed-prop")
-               (println (mx/esum subgraph-memb)) ; has some nonzeros ; sums to 0.69
-               (println (pm (mx/mget subgraph-memb comm-idx))) ; it is 0. what?!?? it is 0 again, what?!?!
-               (println (mx/esum (mx/get-column objs-membs comm-idx))) ; we need to lookup specific cells
-               (println (mx/esum obj-prop-num-obs)) ; has some nonzeros, need to compare cells
-               (println (seq (mx/non-zero-indices seed-objs)))))
-    
     ;; These are SparseIndexedVector and SparseRowMatrix
     (mx/mmul subgraph-memb subset-comms-props)))
 
@@ -373,10 +335,8 @@
    objs-membs :- Mat
    objs-feats :- Mat
    comms-props :- Mat]
-  ;; Keep only the improvements. Is this nonsensical?
   ;; We want to score using all objects since we estimated comms with only seed group objects.
   ;; TODO: another conversion from rows to columns
-  ;; TODO: making rows from columns, would this cause shape errors?
   (let [scorer (partial score-params (sparse-row-matrix (mx/columns objs-groups-possible)) objs-feats)
         num-comms (mx/row-count comms-props)
         new-props (->> (sparse-row-matrix (pmap (partial estimate-comm-props
@@ -441,23 +401,16 @@
            all-changed-comms #{}]
 
       (write-log (format "Iteration: %d" iter-count))
-      ;;(pprint (score-params groups-objs objs-feat-vals props))
       
       (if (= max-iter iter-count)
         (do (write-log "Maximum number of iterations reached.")
             {:objs-membs membs
              :comms-props props})
-        (let [;;new-membs membs 
-              new-membs (e-step (partial restricted-comms objs-groups) objs-feat-vals props)
+        (let [new-membs (e-step (partial restricted-comms objs-groups) objs-feat-vals props)
               {changed :changed
                change-count :change-count
                changed-ids :changed-ids
-               new-props :comms-props} (m-step groups-objs objs-groups new-membs objs-feat-vals props)
-              ;; TODO: make sure to check for NOTEs too...
-              ;; TODO: We were using past iteration membs before, but is that wrong?
-              ;;       Converges faster when using current iteration's membs
-              ;;(m-step groups-objs objs-groups membs objs-feat-vals props)
-              ]
+               new-props :comms-props} (m-step groups-objs objs-groups new-membs objs-feat-vals props)]
           (if (not changed)
             (do (write-log "Community distributions have converged.")
                 {:objs-membs membs
@@ -506,7 +459,6 @@
           seed-objs-idx (->> (mx/non-zero-indices lower-bound-membs)
                              (mapcat identity)
                              (distinct))
-          ;;initial-objs-membs (estimate-membs objs-feat-vals candidate-comms initial-comms-props seed-objs-idx)
           num-objs (mx/column-count lower-bound-membs)
           initial-objs-membs (estimate-membs objs-feat-vals candidate-comms initial-comms-props (range num-objs))
           _ (write-log "Initial object memberships found.")
@@ -525,17 +477,3 @@
       (write-log "Saving output...")
       (save-matrix est-comms-props (format "%s/mle-comms-props.mm" out-dir))
       (save-matrix all-est-objs-membs (format "%s/mle-objs-membs.mm" out-dir)))))
-
-
-(comment
-
-  (def result (s/with-fn-validation
-                (run (partial score
-                              (:true-props data))
-                  (:obj-feats data)
-                  (:obj-membs data)
-                  (estimate-props (:obj-feats data) (:cores data))
-                  2
-                  (partial moc.estimate.mle/estimate-comm (:cores data)))))
-
-  )

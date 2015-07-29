@@ -23,17 +23,6 @@
    ;; TODO: when other-props isn't ProbVec is it all zeros? make a ZeroVec?
    other-props :- (sc/either ProbVec Vec)
    mix-weight :- sc/Num]
-  (comment (mx/matrix (map (fn [y a b]
-                             ;; If observations are already accounted for by
-                             ;; other community distributions, then we know
-                             ;; this community should include a near-zero
-                             ;; probability for the dimension
-                             ;; TODO: Is it not OK to just use 0?
-                             (if (> y b)
-                               (solve-linear y a b)
-                               0))
-                           (proportional obs) (repeat mix-weight) other-props)))
-
   ;; final proportional needed when there were negative values from subtracting the
   ;; proportion of observed feature values by the mixed other community parameters
   (->> (-> (proportional obs)
