@@ -8,9 +8,9 @@
 
 (mx/set-current-implementation :vectorz)
 
-(defn close? [delta-thresh expected actual]
+(defn close? [^double delta-thresh ^double expected ^double actual]
   (< (Math/abs (- expected actual)) delta-thresh))
 
-(defn close-seq? [delta-thresh expected actual]
-  (every? (fn [[e a]] (< (Math/abs (- e a)) delta-thresh))
+(defn close-seq? [^double delta-thresh expected actual]
+  (every? (fn [[^double e ^double a]] (< (Math/abs (- e a)) delta-thresh))
           (map vector expected actual)))

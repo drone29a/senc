@@ -1,5 +1,6 @@
 (ns senc.core-test
   (:require [clojure.test :refer :all]
+            [senc.util-test :refer [close? close-seq?]]
             [senc.core :refer :all]
             [munge.matrix :refer [selected-rows sparse-indexed-vector sparse-matrix]]
             [clojure.core.matrix :as mx]
@@ -9,13 +10,6 @@
 (use-fixtures :once schema.test/validate-schemas)
 
 (mx/set-current-implementation :vectorz)
-
-(defn close? [delta-thresh expected actual]
-  (< (Math/abs (- expected actual)) delta-thresh))
-
-(defn close-seq? [delta-thresh expected actual]
-  (every? (fn [[e a]] (< (Math/abs (- e a)) delta-thresh))
-          (map vector expected actual)))
 
 (deftest estimate-memb-test
   (testing "object is member of only one group"

@@ -34,7 +34,7 @@
 (s/defn get-private-field :- s/Any
   [x :- s/Any
    field :- s/Str]
-  (let [^java.lang.reflect.Field f (-> x
+  (let [^java.lang.reflect.Field f (-> ^java.lang.Object x
                                        (.getClass)
                                        (.getDeclaredField field))]
     (.setAccessible f true)
